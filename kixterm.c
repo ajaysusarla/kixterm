@@ -30,8 +30,22 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <errno.h>
 
+/* openpty() */
+#include <pty.h>
 
+/* waitpid()*/
+#include <sys/wait.h>
+
+/* passwd */
+#include <pwd.h>
+#include <sys/types.h>
+
+/* select */
+#include <sys/select.h>
+
+/* XCB */
 #include <xcb/xcb.h>
 #include <xcb/xcb_ewmh.h>
 #include <xcb/xcb_keysyms.h>
@@ -85,6 +99,7 @@
 
 #define KIXTERM_TITLE "kiXterm"
 #define KIXTERM_TITLE_LEN 7
+#define KIXTERM_TYPE "linux"
 
 #undef MAX
 #undef MIN
@@ -98,7 +113,7 @@
 #endif
 
 /* move these to headers */
-static char shell[] = "/bin/bash";
+static char *shell = NULL;
 
 
 /* Graphic Context enum */
@@ -203,6 +218,8 @@ typedef struct {
 
 kixterm_t kconf; /* TODO: memset before use! */
 kixterm_font_t kfont;
+pid_t pid;
+int mfd;
 
 
 static void print_modifiers(uint32_t mask)
@@ -250,6 +267,21 @@ static void signal_handler(int signal)
 
 success:
         exit(EXIT_SUCCESS);
+}
+
+static void signal_child(int signal)
+{
+        int stat = 0;
+
+        if (waitpid(pid, &stat, 0) < 0) {
+                fprintf(stderr, "waidpid() failed.\n");
+                exit(EXIT_FAILURE);
+        }
+
+        if (WIFEXITED(stat))
+                exit(WEXITSTATUS(stat));
+        else
+                exit(EXIT_FAILURE);
 }
 
 static void init_atoms(void)
@@ -638,19 +670,95 @@ static void kixterm_xcb_init(void)
         return;
 }
 
+static void kixterm_exec_shell(xcb_window_t windowid)
+{
+        char **args;
+        const struct passwd *passwd = getpwuid(getuid());
+        char wid[sizeof(uint32_t) + 1];
+        unsigned long w = windowid;
+
+        printf("kixterm_exec_shell: Entering\n");
+
+        unsetenv("COLUMNS");
+        unsetenv("LINES");
+        unsetenv("TERMCAP");
+
+        if (passwd) {
+                setenv("LOGNAME", passwd->pw_name, 1);
+                setenv("USER", passwd->pw_name, 1);
+                setenv("SHELL", passwd->pw_shell, 0);
+                setenv("HOME", passwd->pw_dir, 0);
+        }
+
+        snprintf(wid, sizeof(wid), "%lu", w);
+
+        setenv("WINDOWID", wid, 1);
+        setenv("TERM", KIXTERM_TYPE, 1);
+
+        signal(SIGCHLD, SIG_DFL);
+	signal(SIGHUP, SIG_DFL);
+	signal(SIGINT, SIG_DFL);
+	signal(SIGQUIT, SIG_DFL);
+	signal(SIGTERM, SIG_DFL);
+	signal(SIGALRM, SIG_DFL);
+
+        shell = getenv("SHELL");
+        if (shell == NULL) {
+                shell = "/bin/sh";
+        }
+
+        args = (char *[]){shell, "-i", NULL};
+
+        printf("kixterm_exec_shell: calling execvp\n");
+        execvp(args[0], args);
+        printf("kixterm_exec_shell: return execvp\n");
+
+        exit(EXIT_FAILURE);
+}
+
+static void kixterm_tty_init(xcb_window_t windowid)
+{
+        int master, slave;
+        struct winsize win = {DEFAULT_ROWS, DEFAULT_COLS, 0, 0};
+
+        printf("kixterm_tty_init: Entering\n");
+
+        if (openpty(&master, &slave, NULL, NULL, &win) < 0) {
+                fprintf(stderr, "openpty failed.\n");
+                exit(EXIT_FAILURE);
+        }
+
+        switch(pid = fork()) {
+        case -1:
+                fprintf(stderr, "fork failed.\n");
+                exit(EXIT_FAILURE);
+        case 0:
+                printf("kixterm_tty_init: Child...\n");
+                setsid();
+                dup2(slave, STDIN_FILENO);
+                dup2(slave, STDOUT_FILENO);
+                dup2(slave, STDERR_FILENO);
+                if (ioctl(slave, TIOCSCTTY, NULL) < 0) {
+                        fprintf(stderr, "ioctl TIOSCTTY failed.\n");
+                        exit(EXIT_FAILURE);
+                }
+                close(slave);
+                close(master);
+                printf("kixterm_tty_init: Child : Calling exec shell...\n");
+                kixterm_exec_shell(windowid);
+                break;
+        default:
+                printf("kixterm_tty_init: Parent...\n");
+                close(slave);
+                mfd = master;
+                signal(SIGCHLD, signal_child);
+                break;
+        }
+
+}
+
 static void kixterm_core_init(void)
 {
-
-        /*
-        uint16_t rows;
-        uint16_t cols;
-        int16_t _x, _y;
-        int border_thickness;
-
-        rows = DEFAULT_ROWS;
-        cols = DEFAULT_COLS;
-        border_thickness = DEFAULT_BORDER_WD;
-         */
         xcb_void_cookie_t cookie;
         xcb_window_t window;
         xcb_rectangle_t win_geometry;
@@ -724,6 +832,7 @@ static void kixterm_core_init(void)
         }
 
         /* Create terminal */
+        kixterm_tty_init(window);
 
         /* Map the window */
         cookie = xcb_map_window_checked(kconf.connection, window);
@@ -737,10 +846,128 @@ static void kixterm_core_init(void)
 
 }
 
-static void kixterm_main_loop(void)
+static void handle_x_response(uint8_t response_type, xcb_generic_event_t *event)
 {
+        switch(response_type) {
+        case XCB_KEY_PRESS:
+                fprintf(stdout, "XCB_KEY_PRESS.\n");
+                break;
+        case XCB_KEY_RELEASE:
+                fprintf(stdout, "XCB_KEY_RELEASE.\n");
+                break;
+        case XCB_BUTTON_PRESS:
+                fprintf(stdout, "XCB_BUTTON_PRESS.\n");
+                break;
+        case XCB_BUTTON_RELEASE:
+                fprintf(stdout, "XCB_BUTTON_RELEASE.\n");
+                break;
+        case XCB_MOTION_NOTIFY:
+                fprintf(stdout, "XCB_MOTION_NOTIFY.\n");
+                break;
+        case XCB_EXPOSE:
+                fprintf(stdout, "XCB_EXPOSE.\n");
+                break;
+        case XCB_ENTER_NOTIFY:
+                fprintf(stdout, "XCB_ENTER_NOTIFY.\n");
+                break;
+        case XCB_LEAVE_NOTIFY:
+                fprintf(stdout, "XCB_LEAVE_NOTIFY.\n");
+                break;
+        case XCB_FOCUS_IN:
+                fprintf(stdout, "XCB_FOCUS_IN.\n");
+                break;
+        case XCB_FOCUS_OUT:
+                fprintf(stdout, "XCB_FOCUS_OUT.\n");
+                break;
+        case XCB_MAP_NOTIFY:
+                fprintf(stdout, "XCB_MAP_NOTIFY.\n");
+                break;
+        case XCB_UNMAP_NOTIFY:
+                fprintf(stdout, "XCB_UNMAP_NOTIFY.\n");
+                break;
+        case XCB_CONFIGURE_NOTIFY:
+                fprintf(stdout, "XCB_CONFIGURE_NOTIFY.\n");
+                break;
+        case XCB_DESTROY_NOTIFY:
+                fprintf(stdout, "XCB_DESTROY_NOTIFY.\n");
+                break;
+        case XCB_SELECTION_CLEAR:
+                fprintf(stdout, "XCB_SELECTION_CLEAR.\n");
+                break;
+        case XCB_SELECTION_NOTIFY:
+                fprintf(stdout, "XCB_SELECTION_NOTIFY.\n");
+                break;
+        case XCB_SELECTION_REQUEST:
+                fprintf(stdout, "XCB_SELECTION_REQUEST.\n");
+                break;
+        case XCB_CLIENT_MESSAGE:
+                fprintf(stdout, "XCB_CLIENT_MESSAGE.\n");
+                break;
+        case XCB_REPARENT_NOTIFY:
+                fprintf(stdout, "XCB_REPARENT_NOTIFY.\n");
+                break;
+        case XCB_PROPERTY_NOTIFY:
+                fprintf(stdout, "XCB_PROPERTY_NOTIFY.\n");
+                break;
+        default:
+                break;
+        }
+}
+
+static void handle_from_x(void)
+{
+        xcb_generic_event_t *event = NULL;
 
         while (1) {
+                uint8_t response_type;
+
+                event = xcb_poll_for_event(kconf.connection);
+
+                if (event == NULL)
+                        break;
+
+                response_type = XCB_EVENT_RESPONSE_TYPE(event);
+                if (response_type != 0)
+                        handle_x_response(response_type, event);
+        }
+
+        if (xcb_connection_has_error(kconf.connection)) {
+                fprintf(stderr, "Error with X connection.\n");
+                exit(EXIT_FAILURE);
+        }
+
+        if (event)
+                free(event);
+}
+
+static void kixterm_main_loop(void)
+{
+        int _xfd = kconf.xfd;
+        fd_set fds;
+        struct timeval *tv = NULL;
+
+        while (1) {
+                FD_ZERO(&fds);
+                FD_SET(mfd, &fds);
+                FD_SET(_xfd, &fds);
+
+                if (select(MAX(_xfd, mfd)+1, &fds, NULL, NULL, tv) < 0) {
+                        if (errno == EINTR)
+                                continue;
+
+                        fprintf(stderr, "select() failed.\n");
+                        exit(EXIT_FAILURE);
+                }
+
+                if (FD_ISSET(mfd, &fds)) {
+                        //printf("from the master..\n");
+                }
+
+                if (FD_ISSET(_xfd, &fds)) {
+                        printf("from X..\n");
+                        handle_from_x();
+                }
+
         }
 
         return;
