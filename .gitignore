@@ -3,7 +3,6 @@
 !/m4/codeset.m4
 /m4/
 configure
-Makefile
 Makefile.in
 aclocal.m4
 autom4te.cache
