@@ -23,19 +23,17 @@
 #ifndef KIXTERM_H
 #define KIXTERM_H
 
-/* Pango */
-#include <pango/pango-font.h>
-#include <pango/pangocairo.h>
-#include <cairo/cairo-xcb.h>
-
 /* XCB */
 #include <xcb/xcb_icccm.h>
 #include <xcb/xcb_keysyms.h>
 #include <xcb/xcb_cursor.h>
 #include <xcb/xcb_ewmh.h>
+#include <xcb/xcb_event.h>
 
 /* XDG dirs */
 #include <basedir.h>
+
+#include "kt-font.h"
 
 /* XCB Atoms */
 enum {
@@ -79,18 +77,6 @@ enum {
         CUR_MAX
 };
 
-typedef struct {
-        PangoFontDescription *normal;
-        PangoFontDescription *bold;
-        PangoFontDescription *italic;
-        PangoFontDescription *bold_italic;
-
-        uint16_t width;
-        uint16_t height;
-
-} kixterm_font_t;
-
-
 /** The main global configuration structure
  */
 typedef struct {
@@ -127,7 +113,7 @@ typedef struct {
         xcb_ewmh_connection_t ewmh;
 
         /* Fonts */
-        kixterm_font_t font;
+        kixterm_font_t *font;
 
         /* X file descriptor */
         int xfd;
@@ -144,6 +130,9 @@ typedef struct {
 
         /* Modifiers */
         uint8_t km[KM_MAX];
+
+        /* pid */
+        pid_t pid;
 } kixterm_t;
 
 extern kixterm_t conf;

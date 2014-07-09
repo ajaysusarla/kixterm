@@ -108,6 +108,8 @@ OBJS = \
 	main.o \
 	kt-xcb.o \
 	kt-util.o \
+	kt-font.o \
+	kt-tty.o \
 	$(NULL)
 
 HEADERS = \
@@ -115,6 +117,8 @@ HEADERS = \
 	kixterm.h \
 	kt-pref.h \
 	kt-util.h \
+	kt-font.h \
+	kt-tty.h \
 	$(NULL)
 
 DEPS = $(wildcard .dep/*.dep)

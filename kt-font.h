@@ -1,5 +1,5 @@
 /*
- * kt-xcb.h - XCB initialization functions
+ * kt-font.h - Pango font management utils.
  *
  * A part of the kixterm project.
  *
@@ -20,17 +20,31 @@
  *
  */
 
-#ifndef KT_XCB_H
-#define KT_XCB_H
+#ifndef KT_FONT_H
+#define KT_FONT_H
 
-#include <stdbool.h>
+/* Pango */
+#include <pango/pango-font.h>
+#include <pango/pangocairo.h>
+#include <cairo/cairo-xcb.h>
 
-#include "kixterm.h"
+typedef struct {
+        PangoFontDescription *normal;
+        PangoFontDescription *bold;
+        PangoFontDescription *italic;
+        PangoFontDescription *bold_italic;
 
-void kt_xcb_init(void);
-void kt_xcb_destroy(void);
+        uint16_t width;
+        uint16_t height;
 
-uint32_t kt_xcb_get_color(void);
-uint32_t kt_xcb_get_visual_bell_color(void);
+} kixterm_font_t;
 
-#endif /* KT_XCB_H */
+
+void kt_get_font_size(PangoFontDescription *font_desc,
+                      uint16_t *width,
+                      uint16_t *height);
+
+kixterm_font_t *kt_font_init(const char *font_name, int font_size);
+
+void kt_font_destroy(kixterm_font_t *font);
+#endif /* KT_FONT_H */

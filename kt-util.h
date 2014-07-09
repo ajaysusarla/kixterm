@@ -45,21 +45,21 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-#define error(str, ...) _print("ERR: ",         \
+#define error(str, ...) _print("ERR",           \
                                true,            \
                                __LINE__,        \
                                __FUNCTION__,    \
                                str,             \
                                ## __VA_ARGS__)
 
-#define warn(str, ...) _print("WARN: ",         \
+#define warn(str, ...) _print("WARN",           \
                               false,            \
                               __LINE__,         \
                               __FUNCTION__,     \
                               str,              \
                               ## __VA_ARGS__)
 
-#define debug(str, ...) _print("DEBUG: ",       \
+#define debug(str, ...) _print("DEBUG",         \
                                false,           \
                                __LINE__,        \
                                __FUNCTION__,    \
@@ -68,5 +68,20 @@
 
 void _print(const char *, bool, int, const char *, const char *, ...);
 
+static inline void * __attribute__ ((malloc)) kt_malloc(ssize_t size)
+{
+        void *ptr;
+
+        if (size <= 0)
+                return NULL;
+
+        ptr = calloc(1, size);
+        if (ptr == NULL) {
+                warn("Memory allocation failure.");
+                abort();
+        }
+
+        return ptr;
+}
 
 #endif /* KT_UTIL_H */

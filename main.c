@@ -24,17 +24,32 @@
 #include <stdlib.h>
 #include <locale.h>
 #include <signal.h>
+#include <unistd.h>
+#include <errno.h>
 
-#include "kt-pref.h"
-#include "kt-util.h"
+#include <sys/select.h>
 
 #include "kixterm.h"
+#include "kt-pref.h"
+#include "kt-util.h"
+#include "kt-xcb.h"
+#include "kt-tty.h"
 
 
+#define DEFAULT_X -1
+#define DEFAULT_Y -1
+#define DEFAULT_ROWS 24
+#define DEFAULT_COLS 80
+#define DEFAULT_BORDER_WD 2
+#define DEFAULT_SCROLLBAR_WD 10
+
+
+/* Global kixterm configuration */
 kixterm_t conf;
 
 static void cleanup(void)
 {
+        kt_xcb_destroy();
 }
 
 static void signal_handler(int signal)
@@ -53,6 +68,243 @@ success:
         exit(EXIT_SUCCESS);
 }
 
+static void kixterm_init(void)
+{
+        xcb_void_cookie_t cookie;
+        xcb_window_t window;
+        xcb_rectangle_t win_geometry;
+        xcb_generic_error_t *error = NULL;
+        xcb_gcontext_t gc;
+        uint32_t win_values[] = {
+                kt_xcb_get_color(),
+                XCB_GRAVITY_NORTH_WEST,
+                XCB_GRAVITY_NORTH_WEST,
+                XCB_BACKING_STORE_NOT_USEFUL,
+                0,
+                XCB_EVENT_MASK_KEY_PRESS |
+                XCB_EVENT_MASK_KEY_RELEASE |
+                XCB_EVENT_MASK_STRUCTURE_NOTIFY |
+                XCB_EVENT_MASK_FOCUS_CHANGE |
+                XCB_EVENT_MASK_ENTER_WINDOW |
+                XCB_EVENT_MASK_LEAVE_WINDOW |
+                XCB_EVENT_MASK_EXPOSURE |
+                XCB_EVENT_MASK_POINTER_MOTION_HINT |
+                XCB_EVENT_MASK_POINTER_MOTION |
+                XCB_EVENT_MASK_BUTTON_PRESS |
+                XCB_EVENT_MASK_BUTTON_RELEASE,
+                conf.cursor[CUR_NORMAL]
+        };
+        uint32_t gc_values[] = {
+                kt_xcb_get_visual_bell_color(),
+                0
+        };
+
+        win_geometry.width = 2 * DEFAULT_BORDER_WD + DEFAULT_COLS * conf.font->width + DEFAULT_SCROLLBAR_WD;
+        win_geometry.height = 2 * DEFAULT_BORDER_WD + DEFAULT_ROWS * conf.font->height;
+
+        window = xcb_generate_id(conf.connection);
+
+        cookie = xcb_create_window_checked(conf.connection,
+                                           conf.screen->root_depth,
+                                           window,
+                                           conf.screen->root,
+                                           DEFAULT_X, DEFAULT_Y,
+                                           win_geometry.width, win_geometry.height,
+                                           0,
+                                           XCB_WINDOW_CLASS_INPUT_OUTPUT,
+                                           conf.screen->root_visual,
+                                           XCB_CW_BACK_PIXEL  |
+                                           XCB_CW_BIT_GRAVITY |
+                                           XCB_CW_WIN_GRAVITY |
+                                           XCB_CW_BACKING_STORE |
+                                           XCB_CW_SAVE_UNDER |
+                                           XCB_CW_EVENT_MASK |
+                                           XCB_CW_CURSOR,
+                                           win_values);
+
+
+        error = xcb_request_check(conf.connection, cookie);
+        if (error) {
+                fprintf(stderr, "Could not create a window(%d)...Exiting!!\n", error->error_code);
+                xcb_destroy_window(conf.connection, window); /* XXX: Move 'window' to conf?? */
+                exit(EXIT_FAILURE);
+        }
+        gc = xcb_generate_id(conf.connection);
+        cookie = xcb_create_gc_checked(conf.connection,
+                                       gc,
+                                       window,
+                                       XCB_GC_FOREGROUND | XCB_GC_GRAPHICS_EXPOSURES,
+                                       gc_values);
+        error = xcb_request_check(conf.connection, cookie);
+        if (error) {
+                fprintf(stderr, "Could not create a GC...Exiting!!\n");
+                xcb_destroy_window(conf.connection, window); /* XXX: Move 'window' to conf?? */
+                exit(EXIT_FAILURE);
+        }
+
+        /* Create terminal */
+        kt_tty_init(window);
+
+        /* Map the window */
+        cookie = xcb_map_window_checked(conf.connection, window);
+        error = xcb_request_check(conf.connection, cookie);
+        if (error) {
+                fprintf(stderr, "Could not map window... Exiting!!\n");
+                exit(EXIT_FAILURE);
+        }
+
+        xcb_flush(conf.connection);
+}
+
+static void handle_x_response(uint8_t response_type, xcb_generic_event_t *event)
+{
+        switch(response_type) {
+        case XCB_KEY_PRESS:
+                fprintf(stdout, "XCB_KEY_PRESS.\n");
+                break;
+        case XCB_KEY_RELEASE:
+                fprintf(stdout, "XCB_KEY_RELEASE.\n");
+                break;
+        case XCB_BUTTON_PRESS:
+                fprintf(stdout, "XCB_BUTTON_PRESS.\n");
+                break;
+        case XCB_BUTTON_RELEASE:
+                fprintf(stdout, "XCB_BUTTON_RELEASE.\n");
+                break;
+        case XCB_MOTION_NOTIFY:
+                fprintf(stdout, "XCB_MOTION_NOTIFY.\n");
+                break;
+        case XCB_EXPOSE:
+                fprintf(stdout, "XCB_EXPOSE.\n");
+                break;
+        case XCB_ENTER_NOTIFY:
+                fprintf(stdout, "XCB_ENTER_NOTIFY.\n");
+                break;
+        case XCB_LEAVE_NOTIFY:
+                fprintf(stdout, "XCB_LEAVE_NOTIFY.\n");
+                break;
+        case XCB_FOCUS_IN:
+                fprintf(stdout, "XCB_FOCUS_IN.\n");
+                break;
+        case XCB_FOCUS_OUT:
+                fprintf(stdout, "XCB_FOCUS_OUT.\n");
+                break;
+        case XCB_MAP_NOTIFY:
+                fprintf(stdout, "XCB_MAP_NOTIFY.\n");
+                break;
+        case XCB_UNMAP_NOTIFY:
+                fprintf(stdout, "XCB_UNMAP_NOTIFY.\n");
+                break;
+        case XCB_CONFIGURE_NOTIFY:
+                fprintf(stdout, "XCB_CONFIGURE_NOTIFY.\n");
+                break;
+        case XCB_DESTROY_NOTIFY:
+                fprintf(stdout, "XCB_DESTROY_NOTIFY.\n");
+                break;
+        case XCB_SELECTION_CLEAR:
+                fprintf(stdout, "XCB_SELECTION_CLEAR.\n");
+                break;
+        case XCB_SELECTION_NOTIFY:
+                fprintf(stdout, "XCB_SELECTION_NOTIFY.\n");
+                break;
+        case XCB_SELECTION_REQUEST:
+                fprintf(stdout, "XCB_SELECTION_REQUEST.\n");
+                break;
+        case XCB_CLIENT_MESSAGE:
+                fprintf(stdout, "XCB_CLIENT_MESSAGE.\n");
+                break;
+        case XCB_REPARENT_NOTIFY:
+                fprintf(stdout, "XCB_REPARENT_NOTIFY.\n");
+                break;
+        case XCB_PROPERTY_NOTIFY:
+                fprintf(stdout, "XCB_PROPERTY_NOTIFY.\n");
+                break;
+        default:
+                break;
+        }
+}
+
+static void handle_from_x(void)
+{
+        xcb_generic_event_t *event = NULL;
+
+        while (1) {
+                uint8_t response_type;
+
+                event = xcb_poll_for_event(conf.connection);
+
+                if (event == NULL)
+                        break;
+
+                response_type = XCB_EVENT_RESPONSE_TYPE(event);
+                if (response_type != 0)
+                        handle_x_response(response_type, event);
+        }
+
+        if (xcb_connection_has_error(conf.connection)) {
+                error("Error with X connection.");
+                exit(EXIT_FAILURE);
+        }
+
+        if (event)
+                free(event);
+}
+
+static void handle_from_tty(void)
+{
+        static char buf[BUFSIZ];
+        static int buflen = 0;
+        char *str;
+        int ret, c;
+
+        ret = read(conf.mfd, buf+buflen, (sizeof(buf)/sizeof(buf[0])) - buflen);
+        if ( ret < 0) {
+                error("read() from shell failed.");
+        }
+
+        buflen += ret;
+
+        str = buf;
+
+//        while ()
+        printf(">> %s <<\n", str);
+}
+
+static void kixterm_main_loop(void)
+{
+        int xfd = conf.xfd;
+        int mfd = conf.mfd;
+        fd_set fds;
+        struct timeval *tv = NULL;
+
+        while (1) {
+                FD_ZERO(&fds);
+                FD_SET(mfd, &fds);
+                FD_SET(xfd, &fds);
+
+                if (select(MAX(xfd, mfd)+1, &fds, NULL, NULL, tv) < 0) {
+                        if (errno == EINTR)
+                                continue;
+
+                        error("select() failed.");
+                }
+
+                if (FD_ISSET(mfd, &fds)) {
+                        //debug("from the master..");
+                        handle_from_tty();
+                }
+
+                if (FD_ISSET(xfd, &fds)) {
+                        debug("from X..");
+                        handle_from_x();
+                        xcb_flush(conf.connection);
+                }
+
+        }
+
+        return;
+}
+
 int main(int argc, char **argv)
 {
         /* Cleanup and signal handling */
@@ -62,6 +314,12 @@ int main(int argc, char **argv)
 
         /* Set the right locale */
         setlocale(LC_CTYPE, "");
+
+        kt_xcb_init();
+
+        kixterm_init();
+
+        kixterm_main_loop();
 
         exit(EXIT_SUCCESS);
 }

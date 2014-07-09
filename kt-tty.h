@@ -1,5 +1,5 @@
 /*
- * kt-xcb.h - XCB initialization functions
+ * kt-tty.h - term emulation and handling
  *
  * A part of the kixterm project.
  *
@@ -20,17 +20,10 @@
  *
  */
 
-#ifndef KT_XCB_H
-#define KT_XCB_H
-
-#include <stdbool.h>
+#ifndef KT_TTY_H
+#define KT_TTY_H
 
 #include "kixterm.h"
 
-void kt_xcb_init(void);
-void kt_xcb_destroy(void);
-
-uint32_t kt_xcb_get_color(void);
-uint32_t kt_xcb_get_visual_bell_color(void);
-
-#endif /* KT_XCB_H */
+void kt_tty_init(xcb_window_t windowid);
+#endif /* KT_TTY_H */

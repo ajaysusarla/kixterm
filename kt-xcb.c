@@ -59,30 +59,6 @@ static xcb_visualtype_t *kt_get_visual_type(void)
         return NULL;
 }
 
-static xcb_atom_t init_atom(const char *atom, bool only_if_exists)
-{
-        xcb_intern_atom_cookie_t cookie;
-        xcb_intern_atom_reply_t *reply = NULL;
-
-        cookie = xcb_intern_atom_unchecked(conf.connection,
-                                           only_if_exists,
-                                           strlen(atom),
-                                           atom);
-
-        reply = xcb_intern_atom_reply(conf.connection,
-                                      cookie,
-                                      NULL);
-        if (reply) {
-                xcb_atom_t _a = reply->atom;
-                free(reply);
-                reply = NULL;
-                return _a;
-        } else {
-                warn("Atom(%s) not found.", atom);
-                return XCB_ATOM_NONE;
-        }
-}
-
 static xcb_pixmap_t kt_get_root_pixmap(xcb_atom_t atom)
 {
         xcb_get_property_cookie_t cookie;
@@ -203,17 +179,41 @@ static xcb_cursor_t kt_invisible_cursor_init(void)
         return cursor;
 }
 
-static void kt_init_atoms(void)
+static xcb_atom_t atom_init(const char *atom, bool only_if_exists)
+{
+        xcb_intern_atom_cookie_t cookie;
+        xcb_intern_atom_reply_t *reply = NULL;
+
+        cookie = xcb_intern_atom_unchecked(conf.connection,
+                                           only_if_exists,
+                                           strlen(atom),
+                                           atom);
+
+        reply = xcb_intern_atom_reply(conf.connection,
+                                      cookie,
+                                      NULL);
+        if (reply) {
+                xcb_atom_t _a = reply->atom;
+                free(reply);
+                reply = NULL;
+                return _a;
+        } else {
+                warn("Atom(%s) not found.", atom);
+                return XCB_ATOM_NONE;
+        }
+}
+
+static void kt_atoms_init(void)
 {
         conf.atom[ATOM_PRIMARY] = XCB_ATOM_PRIMARY;
-        conf.atom[ATOM_CLIPBOARD] = init_atom("CLIPBOARD", true);
-        conf.atom[ATOM_TARGETS] = init_atom("TARGETS", true);
-        conf.atom[ATOM_WM_PROTOCOLS] = init_atom("WM_PROTOCOLS", false);
-        conf.atom[ATOM_WM_DELETE_WINDOW] = init_atom("WM_DELETE_WINDOW", true);
-        conf.atom[ATOM_XROOT_PIXMAP_ID] = init_atom("_XROOTPMAP_ID", true);
-        conf.atom[ATOM_ESETROOT_PIXMAP_ID] = init_atom("ESETROOT_PMAP_ID", true);
-        conf.atom[ATOM_NET_WM_WINDOW_OPACITY] = init_atom("_NET_WM_WINDOW_OPACITY", true);
-        conf.atom[ATOM_UTF8_STRING] = init_atom("UTF8_STRING", false);
+        conf.atom[ATOM_CLIPBOARD] = atom_init("CLIPBOARD", true);
+        conf.atom[ATOM_TARGETS] = atom_init("TARGETS", true);
+        conf.atom[ATOM_WM_PROTOCOLS] = atom_init("WM_PROTOCOLS", false);
+        conf.atom[ATOM_WM_DELETE_WINDOW] = atom_init("WM_DELETE_WINDOW", true);
+        conf.atom[ATOM_XROOT_PIXMAP_ID] = atom_init("_XROOTPMAP_ID", true);
+        conf.atom[ATOM_ESETROOT_PIXMAP_ID] = atom_init("ESETROOT_PMAP_ID", true);
+        conf.atom[ATOM_NET_WM_WINDOW_OPACITY] = atom_init("_NET_WM_WINDOW_OPACITY", true);
+        conf.atom[ATOM_UTF8_STRING] = atom_init("UTF8_STRING", false);
         if (conf.atom[ATOM_UTF8_STRING] == XCB_ATOM_NONE) {
                 warn("Atom UTF8_STRING not found, using STRING.");
                 conf.atom[ATOM_UTF8_STRING] = XCB_ATOM_STRING;
@@ -273,7 +273,7 @@ void kt_xcb_init(void)
         }
 
         /* Atoms */
-        kt_init_atoms();
+        kt_atoms_init();
 
         /* Root pixmap */
         conf.pixmap = kt_get_root_pixmap(conf.atom[ATOM_XROOT_PIXMAP_ID]);
@@ -292,10 +292,58 @@ void kt_xcb_init(void)
         /* Colours */
 
         /* Fonts */
+        conf.font = kt_font_init("Monospace", strlen("Monospace"));
 
         return;
 }
 
 void kt_xcb_destroy(void)
 {
+        kt_font_destroy(conf.font);
+}
+
+uint32_t kt_xcb_get_color(void)
+{
+        xcb_alloc_color_cookie_t cookie;
+        /* FIXME: Get the following r,g,b values from config/prefs */
+        uint8_t r = 0x00 * 0xFF;
+        uint8_t g = 0x00 * 0xFF;
+        uint8_t b = 0x00 * 0xFF;
+        xcb_alloc_color_reply_t *reply;
+        uint32_t pixel;
+
+        cookie = xcb_alloc_color(conf.connection,
+                                 conf.screen->default_colormap,
+                                 r, g, b);
+
+        reply = xcb_alloc_color_reply(conf.connection, cookie, NULL);
+
+        pixel = reply->pixel;
+
+        free(reply);
+
+        return pixel;
+}
+
+uint32_t kt_xcb_get_visual_bell_color(void)
+{
+        xcb_alloc_color_cookie_t cookie;
+        /* FIXME: Get the following r,g,b values from config/prefs */
+        uint8_t r = 0x7F * 0xFF;
+        uint8_t g = 0x7F * 0xFF;
+        uint8_t b = 0x7F * 0xFF;
+        xcb_alloc_color_reply_t *reply;
+        uint32_t pixel;
+
+        cookie = xcb_alloc_color(conf.connection,
+                                 conf.screen->default_colormap,
+                                 r, g, b);
+
+        reply = xcb_alloc_color_reply(conf.connection, cookie, NULL);
+
+        pixel = reply->pixel;
+
+        free(reply);
+
+        return pixel;
 }

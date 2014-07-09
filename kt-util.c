@@ -30,7 +30,7 @@ void _print(const char *type, bool quit, int line,
         va_list ap;
 
         va_start(ap, fmt);
-        fprintf(stderr, "[%s] kixterm: %s:%d: ", type, func, line);
+        fprintf(stderr, "[%s] kixterm: %s+%d: ", type, func, line);
         vfprintf(stderr, fmt, ap);
         va_end(ap);
         fprintf(stderr, "\n");
