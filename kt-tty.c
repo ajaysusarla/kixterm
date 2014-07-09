@@ -1,7 +1,7 @@
 /*
  * kt-tty.c - term emulation and handling
  *
- * A part of the kixterm project.
+ * Part of the kixterm project.
  *
  * Copyright © 2014 Partha Susarla <ajaysusarla@gmail.com>
  *

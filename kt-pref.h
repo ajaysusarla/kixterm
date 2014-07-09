@@ -1,5 +1,5 @@
 /*
- * pref.h - kixterm preferences
+ * kt-pref.h - kixterm preferences
  *
  * Part of the kixterm project.
  *
@@ -20,8 +20,8 @@
  *
  */
 
-#ifndef PREF_H
-#define PREF_H
+#ifndef KT_PREF_H
+#define KT_PREF_H
 
 #include <stdint.h>
 
@@ -33,10 +33,10 @@ typedef struct {
 
         char *fontname;
         int fontsize;
-} preferences;
+} kixterm_prefs;
 
 
-extern preferences prefs, default_prefs;
+extern kixterm_prefs prefs, default_prefs;
 
 
-#endif /* PREF_H */
+#endif /* KT_PREF_H */

@@ -1,7 +1,7 @@
 /*
  * kt-xcb.h - XCB initialization functions
  *
- * A part of the kixterm project.
+ * Part of the kixterm project.
  *
  * Copyright © 2014 Partha Susarla <ajaysusarla@gmail.com>
  *

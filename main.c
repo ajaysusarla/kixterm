@@ -1,7 +1,7 @@
 /*
  * main.c
  *
- * A part of the kixterm project.
+ * Part of the kixterm project.
  *
  * Copyright © 2014 Partha Susarla <ajaysusarla@gmail.com>
  *
@@ -46,6 +46,7 @@
 
 /* Global kixterm configuration */
 kixterm_t conf;
+kixterm_prefs prefs, default_prefs;
 
 static void cleanup(void)
 {
