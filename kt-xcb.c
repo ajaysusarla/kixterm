@@ -221,8 +221,81 @@ static void kt_atoms_init(void)
         return;
 }
 
-/* External functions */
+static void _cairo_render_pixmap(void)
+{
+        if (!window.mapped) {
+                warn("Window not mapped.");
+                return;
+        }
+        if (!window.pixmap) {
+                warn("Pixmap not created.");
+                return;
+        }
+        if (!window.surface) {
+                warn("Cairo surface unavailable.");
+                return;
+        }
 
+        window.cairo = cairo_create(window.surface);
+        cairo_set_line_width(window.cairo, 1.0);
+
+        cairo_save(window.cairo);
+
+        /* XXX:redraw stuff here */
+
+        cairo_restore(window.cairo);
+        cairo_destroy(window.cairo);
+        window.cairo = NULL;
+
+        cairo_surface_flush(window.surface);
+}
+
+static void _cairo_surface_create(void)
+{
+        xcb_void_cookie_t cookie;
+        xcb_generic_error_t *error = NULL;
+
+        window.pixmap = xcb_generate_id(conf.connection);
+        cookie = xcb_create_pixmap_checked(conf.connection,
+                                           conf.screen->root_depth,
+                                           window.pixmap,
+                                           conf.screen->root,
+                                           window.geometry.width,
+                                           window.geometry.height);
+
+        error = xcb_request_check(conf.connection, cookie);
+        if (error) {
+                error("Could not create pixmap...Exiting!!");
+        }
+
+        window.surface = cairo_xcb_surface_create(conf.connection,
+                                                  window.pixmap,
+                                                  conf.visual,
+                                                  window.geometry.width,
+                                                  window.geometry.height);
+
+
+        _cairo_render_pixmap();
+}
+
+static void _cairo_surface_destroy(void)
+{
+        xcb_void_cookie_t cookie;
+        xcb_generic_error_t *error = NULL;
+
+        cairo_surface_finish(window.surface);
+        cairo_surface_destroy(window.surface);
+        window.surface = NULL;
+
+        cookie = xcb_free_pixmap_checked(conf.connection, window.pixmap);
+        error = xcb_request_check(conf.connection, cookie);
+        if (error) {
+                warn("Could not free pixmap for window.");
+        }
+        window.pixmap = 0;
+}
+
+/* External functions */
 void kt_xcb_init(void)
 {
         const char *str;
@@ -257,6 +330,9 @@ void kt_xcb_init(void)
         if (conf.visual == NULL) {
                 error("Could not locate visual.");
         }
+
+        /* Get the file descriptor corresponding to the X connection */
+        conf.xfd = xcb_get_file_descriptor(conf.connection);
 
         /* Get Key Symbols */
         conf.keysyms = xcb_key_symbols_alloc(conf.connection);
@@ -306,9 +382,11 @@ uint32_t kt_xcb_get_color(void)
 {
         xcb_alloc_color_cookie_t cookie;
         /* FIXME: Get the following r,g,b values from config/prefs */
+
         uint8_t r = 0x00 * 0xFF;
         uint8_t g = 0x00 * 0xFF;
         uint8_t b = 0x00 * 0xFF;
+
         xcb_alloc_color_reply_t *reply;
         uint32_t pixel;
 
@@ -346,4 +424,77 @@ uint32_t kt_xcb_get_visual_bell_color(void)
         free(reply);
 
         return pixel;
+}
+
+void kt_xcb_map_notify(xcb_map_notify_event_t *event)
+{
+        warn("Entering..");
+        if (!window.mapped) {
+                warn("\t ***** MAPPED ****");
+                window.mapped = true;
+                _cairo_surface_create();
+                warn("\t ***** Cairo surface created ****");
+        } else {
+                warn("Window already mapped.");
+        }
+
+        warn("Leaving..");
+}
+
+void kt_xcb_unmap_notify(xcb_unmap_notify_event_t *event)
+{
+        if (window.mapped) {
+                _cairo_surface_destroy();
+        } else {
+                warn("Window not mapped.");
+        }
+}
+
+void kt_xcb_write_to_term(char *str, size_t size)
+{
+        PangoLayout *layout;
+        double w, h;
+        uint8_t r = 0xA8 / 255.0;
+        uint8_t g = 0xA8 / 255.0;
+        uint8_t b = 0xA8 / 255.0;
+
+        debug("** Entering[%d]", size);
+        debug("  >>>>>>>>>>>>>>>>>>>>>  %s <<<<<<<<<<<<<<<<<<", str);
+        window.cairo = cairo_create(window.surface);
+        cairo_set_line_width(window.cairo, 1.0);
+
+        cairo_save(window.cairo);
+        {
+                layout = pango_cairo_create_layout(window.cairo);
+                pango_layout_set_font_description(layout, conf.font->normal);
+                pango_layout_set_width(layout, -1);
+
+                cairo_rectangle(window.cairo, 0, 0, 5*size, 10);
+                cairo_clip(window.cairo);
+
+                cairo_set_source_rgba(window.cairo, 1, 1, 1, 1.0);
+
+                cairo_move_to(window.cairo, 0, 0);
+
+                pango_layout_set_text(layout, (const char *)str, size);
+                pango_cairo_update_layout(window.cairo, layout);
+                pango_cairo_show_layout(window.cairo, layout);
+        }
+        cairo_restore(window.cairo);
+
+        cairo_restore(window.cairo);
+        cairo_destroy(window.cairo);
+        window.cairo = NULL;
+        cairo_surface_flush(window.surface);
+
+        xcb_copy_area(conf.connection,
+                      window.pixmap,
+                      window.window,
+                      window.gc,
+                      0, 0,
+                      0, 0,
+                      80, 24);
+        xcb_flush(conf.connection);
+
+        debug("** Exiting");
 }

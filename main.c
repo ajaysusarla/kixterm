@@ -46,6 +46,7 @@
 
 /* Global kixterm configuration */
 kixterm_t conf;
+kt_window_t window;
 kixterm_prefs prefs, default_prefs;
 
 static void cleanup(void)
@@ -71,11 +72,7 @@ success:
 
 static void kixterm_init(void)
 {
-        xcb_void_cookie_t cookie;
-        xcb_window_t window;
-        xcb_rectangle_t win_geometry;
         xcb_generic_error_t *error = NULL;
-        xcb_gcontext_t gc;
         uint32_t win_values[] = {
                 kt_xcb_get_color(),
                 XCB_GRAVITY_NORTH_WEST,
@@ -100,55 +97,56 @@ static void kixterm_init(void)
                 0
         };
 
-        win_geometry.width = 2 * DEFAULT_BORDER_WD + DEFAULT_COLS * conf.font->width + DEFAULT_SCROLLBAR_WD;
-        win_geometry.height = 2 * DEFAULT_BORDER_WD + DEFAULT_ROWS * conf.font->height;
+        window.geometry.width = 2 * DEFAULT_BORDER_WD + DEFAULT_COLS * conf.font->width + DEFAULT_SCROLLBAR_WD;
+        window.geometry.height = 2 * DEFAULT_BORDER_WD + DEFAULT_ROWS * conf.font->height;
 
-        window = xcb_generate_id(conf.connection);
+        window.window = xcb_generate_id(conf.connection);
 
-        cookie = xcb_create_window_checked(conf.connection,
-                                           conf.screen->root_depth,
-                                           window,
-                                           conf.screen->root,
-                                           DEFAULT_X, DEFAULT_Y,
-                                           win_geometry.width, win_geometry.height,
-                                           0,
-                                           XCB_WINDOW_CLASS_INPUT_OUTPUT,
-                                           conf.screen->root_visual,
-                                           XCB_CW_BACK_PIXEL  |
-                                           XCB_CW_BIT_GRAVITY |
-                                           XCB_CW_WIN_GRAVITY |
-                                           XCB_CW_BACKING_STORE |
-                                           XCB_CW_SAVE_UNDER |
-                                           XCB_CW_EVENT_MASK |
-                                           XCB_CW_CURSOR,
-                                           win_values);
+        window.cookie = xcb_create_window_checked(conf.connection,
+                                                  conf.screen->root_depth,
+                                                  window.window,
+                                                  conf.screen->root,
+                                                  DEFAULT_X, DEFAULT_Y,
+                                                  window.geometry.width,
+                                                  window.geometry.height,
+                                                  0,
+                                                  XCB_WINDOW_CLASS_INPUT_OUTPUT,
+                                                  conf.screen->root_visual,
+                                                  XCB_CW_BACK_PIXEL  |
+                                                  XCB_CW_BIT_GRAVITY |
+                                                  XCB_CW_WIN_GRAVITY |
+                                                  XCB_CW_BACKING_STORE |
+                                                  XCB_CW_SAVE_UNDER |
+                                                  XCB_CW_EVENT_MASK |
+                                                  XCB_CW_CURSOR,
+                                                  win_values);
 
 
-        error = xcb_request_check(conf.connection, cookie);
+        error = xcb_request_check(conf.connection, window.cookie);
         if (error) {
-                fprintf(stderr, "Could not create a window(%d)...Exiting!!\n", error->error_code);
-                xcb_destroy_window(conf.connection, window); /* XXX: Move 'window' to conf?? */
-                exit(EXIT_FAILURE);
-        }
-        gc = xcb_generate_id(conf.connection);
-        cookie = xcb_create_gc_checked(conf.connection,
-                                       gc,
-                                       window,
-                                       XCB_GC_FOREGROUND | XCB_GC_GRAPHICS_EXPOSURES,
-                                       gc_values);
-        error = xcb_request_check(conf.connection, cookie);
+                 xcb_destroy_window(conf.connection, window.window);
+                 error("could not create a window(%d).. Exiting!!", error->error_code);
+         }
+
+        window.gc = xcb_generate_id(conf.connection);
+        window.cookie = xcb_create_gc_checked(conf.connection,
+                                              window.gc,
+                                              window.window,
+                                              XCB_GC_FOREGROUND | XCB_GC_GRAPHICS_EXPOSURES,
+                                              gc_values);
+        error = xcb_request_check(conf.connection, window.cookie);
         if (error) {
                 fprintf(stderr, "Could not create a GC...Exiting!!\n");
-                xcb_destroy_window(conf.connection, window); /* XXX: Move 'window' to conf?? */
+                xcb_destroy_window(conf.connection, window.window); /* XXX: Move 'window' to conf?? */
                 exit(EXIT_FAILURE);
         }
 
         /* Create terminal */
-        kt_tty_init(window);
+        kt_tty_init(window.window);
 
         /* Map the window */
-        cookie = xcb_map_window_checked(conf.connection, window);
-        error = xcb_request_check(conf.connection, cookie);
+        window.cookie = xcb_map_window_checked(conf.connection, window.window);
+        error = xcb_request_check(conf.connection, window.cookie);
         if (error) {
                 fprintf(stderr, "Could not map window... Exiting!!\n");
                 exit(EXIT_FAILURE);
@@ -191,10 +189,10 @@ static void handle_x_response(uint8_t response_type, xcb_generic_event_t *event)
                 fprintf(stdout, "XCB_FOCUS_OUT.\n");
                 break;
         case XCB_MAP_NOTIFY:
-                fprintf(stdout, "XCB_MAP_NOTIFY.\n");
+                kt_xcb_map_notify((xcb_map_notify_event_t *) event);
                 break;
         case XCB_UNMAP_NOTIFY:
-                fprintf(stdout, "XCB_UNMAP_NOTIFY.\n");
+                kt_xcb_unmap_notify((xcb_unmap_notify_event_t *) event);
                 break;
         case XCB_CONFIGURE_NOTIFY:
                 fprintf(stdout, "XCB_CONFIGURE_NOTIFY.\n");
@@ -258,17 +256,33 @@ static void handle_from_tty(void)
         char *str;
         int ret, c;
 
-        ret = read(conf.mfd, buf+buflen, (sizeof(buf)/sizeof(buf[0])) - buflen);
-        if ( ret < 0) {
-                error("read() from shell failed.");
-        }
+        debug("enter..");
+//        while (1) {
+        debug("read..");
+                ret = read(conf.mfd, buf+buflen, (sizeof(buf)/sizeof(buf[0])) - buflen);
+                if (ret < 0) {
+                        /* TODO:Handle Errors from `errno` here*/
+                        error("read() from shell failed.");
+                }
+//        }
+                debug("read done..");
 
         buflen += ret;
-
         str = buf;
 
-//        while ()
-        printf(">> %s <<\n", str);
+        memmove (buf, str, buflen);
+        /*
+        while () {
+        }
+        */
+//        printf(">> %s <<\n", str);
+
+        if (window.mapped) {
+                debug("calling kt_xcb_write_to_term");
+                kt_xcb_write_to_term(str, buflen);
+                //kt_xcb_write_to_term("Partha", 6);
+        }
+        debug("return..");
 }
 
 static void kixterm_main_loop(void)
@@ -291,7 +305,7 @@ static void kixterm_main_loop(void)
                 }
 
                 if (FD_ISSET(mfd, &fds)) {
-                        //debug("from the master..");
+                        debug("from the master..");
                         handle_from_tty();
                 }
 
@@ -300,7 +314,6 @@ static void kixterm_main_loop(void)
                         handle_from_x();
                         xcb_flush(conf.connection);
                 }
-
         }
 
         return;
@@ -315,6 +328,10 @@ int main(int argc, char **argv)
 
         /* Set the right locale */
         setlocale(LC_CTYPE, "");
+
+        MEMSET(&conf, 1);
+        MEMSET(&prefs, 1);
+        MEMSET(&default_prefs, 1);
 
         kt_xcb_init();
 

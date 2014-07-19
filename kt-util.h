@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* HOSTNAME_MAX isn't available on all platforms */
 #ifdef LINUX
@@ -44,6 +45,12 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+
+#define NEW(type, count) ((type *)kt_malloc(sizeof(type) * (count)))
+#define MEMSET(ptr, count) ((void)memset((ptr), 0, sizeof(*(ptr)) * (count)))
+#define FREE(ptr)                               \
+        do {                                    \
+        } while(0)                              \
 
 #define error(str, ...) _print("ERR",           \
                                true,            \

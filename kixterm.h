@@ -23,6 +23,8 @@
 #ifndef KIXTERM_H
 #define KIXTERM_H
 
+#include <stdbool.h>
+
 /* XCB */
 #include <xcb/xcb_icccm.h>
 #include <xcb/xcb_keysyms.h>
@@ -135,5 +137,23 @@ typedef struct {
         pid_t pid;
 } kixterm_t;
 
+typedef struct {
+        xcb_window_t window;
+        xcb_void_cookie_t cookie;
+        xcb_gcontext_t gc;
+        xcb_rectangle_t geometry;
+        xcb_pixmap_t pixmap;
+        cairo_surface_t *surface;
+        cairo_t *cairo;
+        bool mapped;
+} kt_window_t;
+
+typedef struct {
+        int index;
+        kt_window_t *next;
+} kt_window_list;
+
+
 extern kixterm_t conf;
+extern kt_window_t window;
 #endif /* KIXTERM_H */

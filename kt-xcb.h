@@ -23,8 +23,6 @@
 #ifndef KT_XCB_H
 #define KT_XCB_H
 
-#include <stdbool.h>
-
 #include "kixterm.h"
 
 void kt_xcb_init(void);
@@ -33,4 +31,10 @@ void kt_xcb_destroy(void);
 uint32_t kt_xcb_get_color(void);
 uint32_t kt_xcb_get_visual_bell_color(void);
 
+/* Event handlers */
+void kt_xcb_map_notify(xcb_map_notify_event_t *event);
+void kt_xcb_unmap_notify(xcb_unmap_notify_event_t *event);
+
+
+void kt_xcb_write_to_term(char *str, size_t size);
 #endif /* KT_XCB_H */
