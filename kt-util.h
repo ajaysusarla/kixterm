@@ -50,10 +50,13 @@
 #define MEMSET(ptr, count) ((void)memset((ptr), 0, sizeof(*(ptr)) * (count)))
 #define FREE(ptr)                               \
         do {                                    \
-        } while(0)                              \
+                void **__ptr = (void **) (ptr); \
+                free(*__ptr);                   \
+                *(void **)__ptr = NULL;         \
+        } while(0)
 
 #define error(str, ...) _print("ERR",           \
-                               true,            \
+                               false,           \
                                __LINE__,        \
                                __FUNCTION__,    \
                                str,             \

@@ -57,7 +57,7 @@ enum {
         CUR_MAX
 };
 
-struct _KixtermAppPriv {
+struct _KtAppPriv {
         const gchar *display;
 
         xcb_connection_t *connection; /* X connection */
@@ -76,7 +76,7 @@ struct _KixtermAppPriv {
         gint xfd; /* X file descriptor */
 };
 
-G_DEFINE_TYPE(KixtermApp, kixterm_app, G_TYPE_OBJECT);
+G_DEFINE_TYPE(KtApp, kt_app, G_TYPE_OBJECT);
 
 /* Private methods */
 static xcb_atom_t atom_init(xcb_connection_t *c,
@@ -234,11 +234,11 @@ static xcb_pixmap_t get_root_pixmap(xcb_connection_t *c,
 }
 
 /* Class methods */
-static void kixterm_app_finalize(GObject *object)
+static void kt_app_finalize(GObject *object)
 {
-        KixtermAppPriv *priv;
+        KtAppPriv *priv;
 
-        priv = KIXTERM_APP(object)->priv;
+        priv = KT_APP(object)->priv;
 
         if (priv->cursor[CUR_NORMAL] != XCB_NONE)
                 xcb_free_cursor(priv->connection,
@@ -257,25 +257,25 @@ static void kixterm_app_finalize(GObject *object)
         if (priv->connection)
                 xcb_disconnect(priv->connection);
 
-        G_OBJECT_CLASS(kixterm_app_parent_class)->finalize(object);
+        G_OBJECT_CLASS(kt_app_parent_class)->finalize(object);
 }
 
-static void kixterm_app_class_init(KixtermAppClass *klass)
+static void kt_app_class_init(KtAppClass *klass)
 {
         GObjectClass *oclass = G_OBJECT_CLASS(klass);
 
-        oclass->finalize = kixterm_app_finalize;
+        oclass->finalize = kt_app_finalize;
 
-        g_type_class_add_private(klass, sizeof(KixtermAppPriv));
+        g_type_class_add_private(klass, sizeof(KtAppPriv));
 }
 
-static void kixterm_app_init(KixtermApp *app)
+static void kt_app_init(KtApp *app)
 {
-        KixtermAppPriv *priv;
+        KtAppPriv *priv;
 
         app->priv = G_TYPE_INSTANCE_GET_PRIVATE(app,
-                                                KIXTERM_APP_TYPE,
-                                                KixtermAppPriv);
+                                                KT_APP_TYPE,
+                                                KtAppPriv);
 
         priv = app->priv;
 
@@ -288,15 +288,15 @@ static void kixterm_app_init(KixtermApp *app)
 }
 
 /* Public methods */
-KixtermApp *kixterm_app_new(void)
+KtApp *kt_app_new(void)
 {
-        KixtermApp *app = NULL;
-        KixtermAppPriv *priv;
+        KtApp *app = NULL;
+        KtAppPriv *priv;
         xcb_screen_iterator_t s_iter;
         xcb_depth_iterator_t d_iter;
         int i;
 
-        app = g_object_new(KIXTERM_APP_TYPE, NULL);
+        app = g_object_new(KT_APP_TYPE, NULL);
 
         priv = app->priv;
 
@@ -401,59 +401,59 @@ KixtermApp *kixterm_app_new(void)
         /* If we failed earlier, */
 failed:
         g_object_unref(app);
-        error("Failed to create KixtermApp object.");
+        error("Failed to create KtApp object.");
         return NULL;
 }
 
-xcb_connection_t *kixterm_app_get_connection(KixtermApp *app)
+xcb_connection_t *kt_app_get_x_connection(KtApp *app)
 {
-        KixtermAppPriv *priv;
+        KtAppPriv *priv;
 
-        g_return_val_if_fail(KIXTERM_IS_APP(app), NULL);
+        g_return_val_if_fail(KT_IS_APP(app), NULL);
 
         priv = app->priv;
 
         return priv->connection;
 }
 
-xcb_ewmh_connection_t *kixterm_app_get_ewmh_connection(KixtermApp *app)
+xcb_ewmh_connection_t *kt_app_get_ewmh_connection(KtApp *app)
 {
-        KixtermAppPriv *priv;
+        KtAppPriv *priv;
 
-        g_return_val_if_fail(KIXTERM_IS_APP(app), NULL);
+        g_return_val_if_fail(KT_IS_APP(app), NULL);
 
         priv = app->priv;
 
         return &priv->ewmh;
 }
 
-xcb_screen_t *kixterm_app_get_screen(KixtermApp *app)
+xcb_screen_t *kt_app_get_screen(KtApp *app)
 {
-        KixtermAppPriv *priv;
+        KtAppPriv *priv;
 
-        g_return_val_if_fail(KIXTERM_IS_APP(app), NULL);
+        g_return_val_if_fail(KT_IS_APP(app), NULL);
 
         priv = app->priv;
 
         return priv->screen;
 }
 
-gint kixterm_app_get_default_screen(KixtermApp *app)
+gint kt_app_get_default_screen(KtApp *app)
 {
-        KixtermAppPriv *priv;
+        KtAppPriv *priv;
 
-        g_return_val_if_fail(KIXTERM_IS_APP(app), -1);
+        g_return_val_if_fail(KT_IS_APP(app), -1);
 
         priv = app->priv;
 
         return priv->default_screen;
 }
 
-xcb_visualtype_t *kixterm_app_get_visual(KixtermApp *app)
+xcb_visualtype_t *kt_app_get_visual(KtApp *app)
 {
-        KixtermAppPriv *priv;
+        KtAppPriv *priv;
 
-        g_return_val_if_fail(KIXTERM_IS_APP(app), -1);
+        g_return_val_if_fail(KT_IS_APP(app), -1);
 
         priv = app->priv;
 
@@ -461,11 +461,11 @@ xcb_visualtype_t *kixterm_app_get_visual(KixtermApp *app)
 }
 
 
-gint kixterm_app_get_xfd(KixtermApp *app)
+gint kt_app_get_xfd(KtApp *app)
 {
-        KixtermAppPriv *priv;
+        KtAppPriv *priv;
 
-        g_return_val_if_fail(KIXTERM_IS_APP(app), -1);
+        g_return_val_if_fail(KT_IS_APP(app), -1);
 
         priv = app->priv;
 
@@ -476,35 +476,36 @@ gint kixterm_app_get_xfd(KixtermApp *app)
                 return priv->xfd;
 }
 
-const gchar *kixterm_app_get_display_name(KixtermApp *app)
+const gchar *kt_app_get_display_name(KtApp *app)
 {
-        KixtermAppPriv *priv;
+        KtAppPriv *priv;
 
-        g_return_val_if_fail(KIXTERM_IS_APP(app), NULL);
+        g_return_val_if_fail(KT_IS_APP(app), NULL);
 
         priv = app->priv;
 
         return priv->display;
 }
 
-xcb_cursor_t kixterm_app_get_normal_cursor(KixtermApp *app)
+xcb_cursor_t kt_app_get_normal_cursor(KtApp *app)
 {
-        KixtermAppPriv *priv;
+        KtAppPriv *priv;
 
-        g_return_val_if_fail(KIXTERM_IS_APP(app), -1);
+        g_return_val_if_fail(KT_IS_APP(app), -1);
 
         priv = app->priv;
 
         return priv->cursor[CUR_NORMAL];
 }
 
-xcb_cursor_t kixterm_app_get_hidden_cursor(KixtermApp *app)
+xcb_cursor_t kt_app_get_hidden_cursor(KtApp *app)
 {
-        KixtermAppPriv *priv;
+        KtAppPriv *priv;
 
-        g_return_val_if_fail(KIXTERM_IS_APP(app), -1);
+        g_return_val_if_fail(KT_IS_APP(app), -1);
 
         priv = app->priv;
 
         return priv->cursor[CUR_HIDDEN];
 }
+
