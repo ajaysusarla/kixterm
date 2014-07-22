@@ -27,18 +27,18 @@
 G_BEGIN_DECLS
 
 /* Custom color structure. Storing colors as individual R, B, G is convenient
-   to use when working with pango/cairo.*/
+   to use when working with xcb/pango/cairo.*/
 typedef struct {
-        guint8 r;
-        guint8 g;
-        guint8 b;
+        gdouble r;
+        gdouble g;
+        gdouble b;
 } kt_color_t;
 
-#define INIT_COLOR(x)                          \
-        do {                                   \
-                x.r = 0;                       \
-                x.g = 0;                       \
-                x.b = 0;                       \
+#define INIT_COLOR(x)                            \
+        do {                                     \
+                x.r = 0.0;                       \
+                x.g = 0.0;                       \
+                x.b = 0.0;                       \
         } while (0)
 
 G_END_DECLS
