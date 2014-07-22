@@ -28,6 +28,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <glib-object.h>
+
+/* Custom color structure. Storing colors as individual R, B, G is convenient
+   to use when working with xcb/pango/cairo.*/
+typedef struct {
+        guint8 r;
+        guint8 g;
+        guint8 b;
+} kt_color_t;
+
 /* HOSTNAME_MAX isn't available on all platforms */
 #ifdef LINUX
 #define HOSTNAME_MAX (HOST_NAME_MAX + 1)
