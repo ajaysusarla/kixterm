@@ -74,6 +74,7 @@ KtPrefs *kt_prefs_new(void)
 
         prefs->fg_color = linux_colors[7];
         prefs->bg_color = linux_colors[0];
+        prefs->vb_color = reserved_colors[0];
 
         return prefs;
 }

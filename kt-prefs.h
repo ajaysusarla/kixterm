@@ -24,7 +24,7 @@
 
 #include <glib-object.h>
 
-#include "kt-color.h"
+#include "kt-util.h"
 
 G_BEGIN_DECLS
 
@@ -61,6 +61,7 @@ struct _KtPrefs {
         /* Colours */
         kt_color_t fg_color;
         kt_color_t bg_color;
+        kt_color_t vb_color; /* Visual Bell color */
 
         KtPrefsPriv *priv;
 };
