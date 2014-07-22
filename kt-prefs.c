@@ -24,6 +24,7 @@
 #include "kt-color-scheme.h"
 
 struct _KtPrefsPriv {
+        gboolean ignore;
 };
 
 G_DEFINE_TYPE(KtPrefs, kt_prefs, G_TYPE_OBJECT);
