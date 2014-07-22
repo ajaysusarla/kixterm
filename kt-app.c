@@ -236,9 +236,11 @@ static xcb_pixmap_t get_root_pixmap(xcb_connection_t *c,
 /* Class methods */
 static void kt_app_finalize(GObject *object)
 {
+        KtApp *app;
         KtAppPriv *priv;
 
-        priv = KT_APP(object)->priv;
+        app = KT_APP(object);
+        priv = app->priv;
 
         if (priv->cursor[CUR_NORMAL] != XCB_NONE)
                 xcb_free_cursor(priv->connection,
@@ -395,7 +397,6 @@ KtApp *kt_app_new(void)
                         warn("Failed to find root pixmap for atom: ESETROOT_PMAP_ID.");
                 }
         }
-
 
         return app;
         /* If we failed earlier, */

@@ -44,6 +44,7 @@ typedef struct _KtAppPriv KtAppPriv;
 struct _KtApp {
         GObject parent_instance;
 
+        /* Private */
         KtAppPriv *priv;
 };
 
