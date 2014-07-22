@@ -72,6 +72,10 @@ const kt_color_t rxvt_colors[] = {
         { 0xFF, 0xFF, 0xFF }
 };
 
+const kt_color_t reserved_colors[] = {
+        {0x7F, 0x7F, 0x7F} /* Gray for visual bell */
+};
+
 G_END_DECLS
 
 #endif /* KT_COLOR_SCHEME_H */

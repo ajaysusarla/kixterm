@@ -19,27 +19,44 @@
  * License along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
 #ifndef KT_COLOR_H
 #define KT_COLOR_H
 
 #include <glib-object.h>
 
+#include "kt-app.h"
+#include "kt-prefs.h"
+
 G_BEGIN_DECLS
 
-/* Custom color structure. Storing colors as individual R, B, G is convenient
-   to use when working with xcb/pango/cairo.*/
-typedef struct {
-        gdouble r;
-        gdouble g;
-        gdouble b;
-} kt_color_t;
+typedef struct _KtColor KtColor;
+typedef struct _KtColorClass KtColorClass;
+typedef struct _KtColorPriv KtColorPriv;
 
-#define INIT_COLOR(x)                            \
-        do {                                     \
-                x.r = 0.0;                       \
-                x.g = 0.0;                       \
-                x.b = 0.0;                       \
-        } while (0)
+#define KT_COLOR_TYPE (kt_color_get_type())
+#define KT_COLOR(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), KT_COLOR_TYPE, KtColor))
+#define KT_COLOR_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass), TYPE_BINARY_TREE, KtColorClass))
+#define KT_IS_COLOR(obj)  (G_TYPE_CHECK_INSTANCE_TYPE((obj), KT_COLOR_TYPE))
+#define KT_IS_COLOR_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass), KT_COLOR_TYPE))
+#define KT_COLOR_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS((obj), KT_COLOR_TYPE, KtColorClass))
+
+struct _KtColor {
+        GObject parent_instance;
+
+        /* <private> */
+        KtColorPriv *priv;
+};
+
+struct _KtColorClass {
+        GObjectClass parent_class;
+};
+
+GType kt_color_get_type(void);
+KtColor *kt_color_new(KtApp *app, KtPrefs *prefs);
+
+guint32 kt_color_get_bg_pixel(KtColor *color);
+guint32 kt_color_get_vb_pixel(KtColor *color);
 
 G_END_DECLS
 
