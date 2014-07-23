@@ -1,5 +1,5 @@
 /*
- * kt-font.h - Pango font management utils.
+ * kt-font.h
  *
  * Part of the kixterm project.
  *
@@ -19,32 +19,40 @@
  * License along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
-
 #ifndef KT_FONT_H
 #define KT_FONT_H
 
-/* Pango */
+#include <glib-object.h>
+
 #include <pango/pango-font.h>
-#include <pango/pangocairo.h>
-#include <cairo/cairo-xcb.h>
 
-typedef struct {
-        PangoFontDescription *normal;
-        PangoFontDescription *bold;
-        PangoFontDescription *italic;
-        PangoFontDescription *bold_italic;
+#include "kt-app.h"
+#include "kt-prefs.h"
 
-        uint16_t width;
-        uint16_t height;
+typedef struct _KtFont KtFont;
+typedef struct _KtFontClass KtFontClass;
+typedef struct _KtFontPriv KtFontPriv;
 
-} kixterm_font_t;
+#define KT_FONT_TYPE (kt_font_get_type())
+#define KT_FONT(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), KT_FONT_TYPE, KtFont))
+#define KT_FONT_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass), TYPE_BINARY_TREE, KtFontClass))
+#define KT_IS_FONT(obj)  (G_TYPE_CHECK_INSTANCE_TYPE((obj), KT_FONT_TYPE))
+#define KT_IS_FONT_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass), KT_FONT_TYPE))
+#define KT_FONT_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS((obj), KT_FONT_TYPE, KtFontClass))
 
+struct _KtFont {
+        GObject parent_instance;
 
-void kt_get_font_size(PangoFontDescription *font_desc,
-                      uint16_t *width,
-                      uint16_t *height);
+        /* <private> */
+        KtFontPriv *priv;
+};
 
-kixterm_font_t *kt_font_init(const char *font_name, int font_size);
+struct _KtFontClass {
+        GObjectClass parent_class;
+};
 
-void kt_font_destroy(kixterm_font_t *font);
+GType kt_font_get_type(void);
+KtFont *kt_font_new(KtApp *app, KtPrefs *prefs);
+
+void kt_font_get_size(KtFont *font, gint *width, gint *height);
 #endif /* KT_FONT_H */

@@ -1,5 +1,5 @@
 /*
- * kt-font.c - Pango font management utils.
+ * kt-font.c
  *
  * Part of the kixterm project.
  *
@@ -20,69 +20,97 @@
  *
  */
 
-#include <stdbool.h>
+/*
+  http://x11.gp2x.de/personal/google/
+ */
+#include "kt-font.h"
 
-#include "kixterm.h"
-#include "kt-util.h"
+#include <cairo/cairo-xcb.h>
+#include <pango/pangocairo.h>
 
-/*XXX: remove the following(font_name and font_size) once preferences are active.*/
-static char default_font_name[] = "Monospace";
-static int default_font_size = 12;
+struct _KtFontPriv {
+        PangoFontDescription *normal;
+        PangoFontDescription *bold;
+        PangoFontDescription *italic;
+        PangoFontDescription *bold_italic;
 
-/* Internal functions */
-static PangoFontDescription * font_new(const char *font_name,
-                                       int font_size,
-                                       bool normal,
-                                       bool bold,
-                                       bool italic)
+        guint16 width;
+        guint16 height;
+
+        /* Properties */
+        KtApp *app;
+        KtPrefs *prefs;
+};
+
+enum {
+        PROP_0,
+        PROP_KT_APP,
+        PROP_KT_PREFS,
+};
+
+G_DEFINE_TYPE(KtFont, kt_font, G_TYPE_OBJECT);
+
+/* Private methods */
+static PangoFontDescription *font_desc_new(const char *name,
+                                           int size,
+                                           gboolean normal,
+                                           gboolean bold,
+                                           gboolean italic)
 {
-        PangoFontDescription *font;
+        PangoFontDescription *font_desc = NULL;
 
-        font = pango_font_description_new();
+        font_desc = pango_font_description_new();
 
-        pango_font_description_set_family(font, font_name);
-        pango_font_description_set_absolute_size(font, font_size * PANGO_SCALE);
-        pango_font_description_set_weight(font,
+        pango_font_description_set_family(font_desc, name);
+        pango_font_description_set_absolute_size(font_desc, size * PANGO_SCALE);
+        pango_font_description_set_weight(font_desc,
                                           bold ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL);
-        pango_font_description_set_style(font,
+        pango_font_description_set_style(font_desc,
                                          italic ? PANGO_STYLE_OBLIQUE : PANGO_STYLE_NORMAL);
 
-        return font;
+        return font_desc;
 }
 
-static void font_free(PangoFontDescription *font)
+static void font_desc_free(PangoFontDescription *font_desc)
 {
-        pango_font_description_free(font);
-        font = NULL;
+        pango_font_description_free(font_desc);
+        font_desc = NULL;
 }
 
-/* External functions */
-void kt_get_font_size(PangoFontDescription *font_desc,
-                      uint16_t *width,
-                      uint16_t *height)
+static void get_font_size(KtFont *font)
 {
         cairo_surface_t *surface;
         cairo_t *cairo;
         PangoLayout *layout;
         PangoRectangle i_rect, l_rect;
+        KtFontPriv *priv;
+        xcb_connection_t *con;
+        xcb_screen_t *screen;
+        xcb_visualtype_t *visual;
 
-        surface = cairo_xcb_surface_create(conf.connection,
-                                           conf.screen->root,
-                                           conf.visual,
+        priv = font->priv;
+
+        con = kt_app_get_x_connection(priv->app);
+        screen = kt_app_get_screen(priv->app);
+        visual = kt_app_get_visual(priv->app);
+
+        surface = cairo_xcb_surface_create(con,
+                                           screen->root,
+                                           visual,
                                            1, 1);
 
         cairo = cairo_create(surface);
 
         layout = pango_cairo_create_layout(cairo);
-        pango_layout_set_font_description(layout, font_desc);
+        pango_layout_set_font_description(layout, priv->normal);
 
         pango_layout_set_text(layout, "W", -1);
         pango_cairo_update_layout(cairo, layout);
 
         pango_layout_get_extents(layout, &i_rect, &l_rect);
 
-        *width = l_rect.width / PANGO_SCALE;
-        *height = l_rect.height / PANGO_SCALE;
+        priv->width = l_rect.width / PANGO_SCALE;
+        priv->height = l_rect.height / PANGO_SCALE;
 
 
         g_object_unref(layout);
@@ -90,66 +118,166 @@ void kt_get_font_size(PangoFontDescription *font_desc,
         cairo_surface_destroy(surface);
 }
 
-kixterm_font_t *kt_font_init(const char *font_name, int font_size)
+/* Class methods */
+static void kt_font_get_property(GObject *obj,
+                                 guint param_id,
+                                 GValue *value,
+                                 GParamSpec *pspec)
 {
-        kixterm_font_t *font = NULL;
+        KtFont *font = KT_FONT(obj);
+        KtFontPriv *priv = font->priv;
 
-        uint16_t height;
-        uint16_t width;
-
-        if (font_name == NULL || font_size <= 0) {
-                warn("Invalid font name/size.");
-                return NULL;
+        switch(param_id) {
+        case PROP_KT_APP:
+                g_value_set_object(value, priv->app);
+                break;
+        case PROP_KT_PREFS:
+                g_value_set_object(value, priv->prefs);
+                break;
+        default:
+                G_OBJECT_WARN_INVALID_PROPERTY_ID(obj, param_id, pspec);
+                break;
         }
+}
 
-        font = (kixterm_font_t *)kt_malloc(sizeof(kixterm_font_t));
-        font->normal = NULL;
-        font->bold = NULL;
-        font->italic = NULL;
-        font->bold_italic = NULL;
-        font->width = -1;
-        font->height = -1;
+static void kt_font_set_property(GObject *obj,
+                                 guint param_id,
+                                 const GValue *value,
+                                 GParamSpec *pspec)
+{
+        KtFont *font = KT_FONT(obj);
+        KtFontPriv *priv = font->priv;
 
-        font->normal = font_new(font_name, font_size,
-                               true, false, false);
-        kt_get_font_size(font->normal, &width, &height);
-        printf("Monospace normal font size: (W):%d, (H):%d\n", width, height);
+        switch(param_id) {
+        case PROP_KT_APP:
+                if (priv->app)
+                        g_object_unref(priv->app);
 
-        font->bold = font_new(font_name, font_size,
-                             false, true, false);
-        kt_get_font_size(font->bold, &width, &height);
-        printf("Monospace bold font size: (W):%d, (H):%d\n", width, height);
+                priv->app = g_object_ref(g_value_get_object(value));
+                break;
+        case PROP_KT_PREFS:
+                if (priv->prefs)
+                        g_object_unref(priv->prefs);
 
-        font->italic = font_new(font_name, font_size,
-                             false, false, true);
-        kt_get_font_size(font->italic, &width, &height);
-        printf("Monospace italic font size: (W):%d, (H):%d\n", width, height);
+                priv->prefs = g_object_ref(g_value_get_object(value));
+                break;
+        default:
+                G_OBJECT_WARN_INVALID_PROPERTY_ID(obj, param_id, pspec);
+                break;
+        }
+}
 
-        font->bold_italic = font_new(font_name, font_size,
-                                false, true, true);
-        kt_get_font_size(font->bold_italic, &width, &height);
-        printf("Monospace bold-italic font size: (W):%d, (H):%d\n", width, height);
+static void kt_font_finalize(GObject *object)
+{
+        KtFont *font = KT_FONT(object);
+        KtFontPriv *priv = font->priv;
 
-        font->width = width;
-        font->height = height;
+        if (priv->normal)
+                font_desc_free(priv->normal);
+        if (priv->bold)
+                font_desc_free(priv->bold);
+        if (priv->italic)
+                font_desc_free(priv->italic);
+        if (priv->bold_italic)
+                font_desc_free(priv->bold_italic);
 
+        if (priv->app)
+                g_object_unref(priv->app);
+        if (priv->prefs)
+                g_object_unref(priv->prefs);
+
+        G_OBJECT_CLASS(kt_font_parent_class)->finalize(object);
+}
+
+static void kt_font_class_init(KtFontClass *klass)
+{
+        GObjectClass *oclass = G_OBJECT_CLASS(klass);
+
+        oclass->get_property = kt_font_get_property;
+        oclass->set_property = kt_font_set_property;
+        oclass->finalize = kt_font_finalize;
+
+        g_object_class_install_property(oclass,
+                                        PROP_KT_APP,
+                                        g_param_spec_object("kt-app",
+                                                            "Kixterm App",
+                                                            "The KtApp object",
+                                                            KT_APP_TYPE,
+                                                            G_PARAM_CONSTRUCT_ONLY |
+                                                            G_PARAM_READWRITE));
+
+        g_object_class_install_property(oclass,
+                                        PROP_KT_PREFS,
+                                        g_param_spec_object("kt-prefs",
+                                                            "Kixterm Preferences",
+                                                            "The KtPrefs object",
+                                                            KT_PREFS_TYPE,
+                                                            G_PARAM_CONSTRUCT_ONLY |
+                                                            G_PARAM_READWRITE));
+
+        g_type_class_add_private(klass, sizeof(KtFontPriv));
+}
+
+static void kt_font_init(KtFont *font)
+{
+        KtFontPriv *priv;
+
+        font->priv = G_TYPE_INSTANCE_GET_PRIVATE(font,
+                                                 KT_FONT_TYPE,
+                                                 KtFontPriv);
+
+        priv = font->priv;
+
+        priv->normal = NULL;
+        priv->bold = NULL;
+        priv->italic = NULL;
+        priv->bold_italic = NULL;
+
+        priv->width = -1;
+        priv->height = -1;
+}
+
+/* Public methods */
+KtFont *kt_font_new(KtApp *app, KtPrefs *prefs)
+{
+        KtFont *font = NULL;
+        KtFontPriv *priv;
+
+        font = g_object_new(KT_FONT_TYPE,
+                            "kt-app", app,
+                            "kt-prefs", prefs,
+                            NULL);
+
+        priv = font->priv;
+
+        priv->normal = font_desc_new(priv->prefs->font_name,
+                                     priv->prefs->font_size,
+                                     TRUE, FALSE, FALSE);
+
+        priv->bold = font_desc_new(priv->prefs->font_name,
+                                   priv->prefs->font_size,
+                                   FALSE, FALSE, FALSE);
+
+        priv->italic = font_desc_new(priv->prefs->font_name,
+                                     priv->prefs->font_size,
+                                     FALSE, FALSE, TRUE);
+
+        priv->bold_italic = font_desc_new(priv->prefs->font_name,
+                                          priv->prefs->font_size,
+                                          FALSE, TRUE, TRUE);
+
+        get_font_size(font);
         return font;
 }
 
-void kt_font_destroy(kixterm_font_t *font)
+void kt_font_get_size(KtFont *font, int *width, int *height)
 {
-        if (font == NULL)
-                return;
+        KtFontPriv *priv;
 
-        if (font->normal)
-                font_free(font->normal);
-        if (font->bold)
-                font_free(font->bold);
-        if (font->italic)
-                font_free(font->italic);
-        if (font->bold_italic)
-                font_free(font->bold_italic);
+        g_return_if_fail(KT_IS_FONT(font));
 
-        font->height = -1;
-        font->width = -1;
+        priv = font->priv;
+
+        *width = priv->width;
+        *height = priv->height;
 }
