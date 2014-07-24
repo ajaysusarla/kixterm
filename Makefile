@@ -106,19 +106,24 @@ EXTRA_FLAGS += \
 # Object Files
 OBJS = \
 	main.o \
-	kt-xcb.o \
 	kt-util.o \
+	kt-app.o \
+	kt-window.o \
+	kt-prefs.o \
+	kt-color.o \
 	kt-font.o \
-	kt-tty.o \
+	kt-terminal.o \
 	$(NULL)
 
 HEADERS = \
-	kt-xcb.h \
 	kixterm.h \
-	kt-pref.h \
 	kt-util.h \
+	kt-app.h \
+	kt-window.h \
+	kt-prefs.h \
+	kt-color.h \
 	kt-font.h \
-	kt-tty.h \
+	kt-terminal.h \
 	$(NULL)
 
 DEPS = $(wildcard .dep/*.dep)
