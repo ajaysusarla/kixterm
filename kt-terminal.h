@@ -24,6 +24,12 @@
 
 #include <glib-object.h>
 
+#include <xcb/xcb.h>
+
+#include "kt-prefs.h"
+
+G_BEGIN_DECLS
+
 typedef struct _KtTerminal KtTerminal;
 typedef struct _KtTerminalClass KtTerminalClass;
 typedef struct _KtTerminalPriv KtTerminalPriv;
@@ -47,4 +53,8 @@ struct _KtTerminalClass {
 };
 
 GType kt_terminal_get_type(void);
+KtTerminal *kt_terminal_new(KtPrefs *prefs, xcb_window_t wid);
+
+G_END_DECLS
+
 #endif /* KT_TERMINAL_H */

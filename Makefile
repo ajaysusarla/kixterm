@@ -113,6 +113,7 @@ OBJS = \
 	kt-color.o \
 	kt-font.o \
 	kt-terminal.o \
+	kt-pty.o \
 	$(NULL)
 
 HEADERS = \
@@ -124,6 +125,7 @@ HEADERS = \
 	kt-color.h \
 	kt-font.h \
 	kt-terminal.h \
+	kt-pty.h \
 	$(NULL)
 
 DEPS = $(wildcard .dep/*.dep)

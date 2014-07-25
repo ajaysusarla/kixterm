@@ -23,15 +23,67 @@
 #include "kt-terminal.h"
 
 struct _KtTerminalPriv {
-        gboolean ignore;
+        xcb_window_t wid;
+
+        /* Properties */
+        KtPrefs *prefs;
 };
+
+enum {
+        PROP_0,
+        PROP_KT_PREFS,
+};
+
 G_DEFINE_TYPE(KtTerminal, kt_terminal, G_TYPE_OBJECT);
 
 /* Private methods */
 
 /* Class methods */
+static void kt_terminal_get_property(GObject *obj,
+                                     guint param_id,
+                                     GValue *value,
+                                     GParamSpec *pspec)
+{
+        KtTerminal *term = KT_TERMINAL(obj);
+        KtTerminalPriv *priv = term->priv;
+
+        switch(param_id) {
+        case PROP_KT_PREFS:
+                g_value_set_object(value, priv->prefs);
+        default:
+                G_OBJECT_WARN_INVALID_PROPERTY_ID(obj, param_id, pspec);
+                break;
+        }
+}
+
+static void kt_terminal_set_property(GObject *obj,
+                                     guint param_id,
+                                     const GValue *value,
+                                     GParamSpec *pspec)
+{
+        KtTerminal *term = KT_TERMINAL(obj);
+        KtTerminalPriv *priv = term->priv;
+
+        switch(param_id) {
+        case PROP_KT_PREFS:
+                if (priv->prefs)
+                        g_object_unref(priv->prefs);
+
+                priv->prefs = g_object_ref(g_value_get_object(value));
+                break;
+        default:
+                G_OBJECT_WARN_INVALID_PROPERTY_ID(obj, param_id, pspec);
+                break;
+        }
+}
+
 static void kt_terminal_finalize(GObject *object)
 {
+        KtTerminal *term = KT_TERMINAL(object);
+        KtTerminalPriv *priv = term->priv;
+
+        if (priv->prefs)
+                g_object_unref(priv->prefs);
 
         G_OBJECT_CLASS(kt_terminal_parent_class)->finalize(object);
 }
@@ -40,24 +92,44 @@ static void kt_terminal_class_init(KtTerminalClass *klass)
 {
         GObjectClass *oclass = G_OBJECT_CLASS(klass);
 
+        oclass->get_property = kt_terminal_get_property;
+        oclass->set_property = kt_terminal_set_property;
         oclass->finalize = kt_terminal_finalize;
+
+        g_object_class_install_property(oclass,
+                                        PROP_KT_PREFS,
+                                        g_param_spec_object("kt-prefs",
+                                                            "Kixterm Preferences",
+                                                            "The KtPrefs object",
+                                                            KT_PREFS_TYPE,
+                                                            G_PARAM_CONSTRUCT_ONLY |
+                                                            G_PARAM_READWRITE));
 
         g_type_class_add_private(klass, sizeof(KtTerminalPriv));
 }
 
 static void kt_terminal_init(KtTerminal *term)
 {
+        KtTerminalPriv *priv;
+
         term->priv = G_TYPE_INSTANCE_GET_PRIVATE(term,
                                                  KT_TERMINAL_TYPE,
                                                  KtTerminalPriv);
+        priv = term->priv;
+
+        priv->wid = -1;
 }
 
 /* Public methods */
-KtTerminal *kt_terminal_new(void)
+KtTerminal *kt_terminal_new(KtPrefs *prefs, xcb_window_t wid)
 {
         KtTerminal *terminal = NULL;
 
-        terminal = g_object_new(KT_TERMINAL_TYPE, NULL);
+        g_return_val_if_fail(KT_IS_PREFS(prefs), NULL);
+
+        terminal = g_object_new(KT_TERMINAL_TYPE,
+                                "kt-prefs", prefs,
+                                NULL);
 
         return terminal;
 }

@@ -21,6 +21,7 @@
  */
 
 #include "kt-window.h"
+#include "kt-terminal.h"
 #include "kt-util.h"
 
 #include <xcb/xcb_icccm.h>
@@ -35,6 +36,8 @@ struct _KtWindowPriv {
         cairo_surface_t *surface;
         cairo_t *cairo;
         gboolean mapped;
+
+        KtTerminal *terminal;
 
         /* Properites */
         KtApp *app;
@@ -133,6 +136,11 @@ static void kt_window_finalize(GObject *object)
         xcb_destroy_window(con, priv->window);
         xcb_free_gc(con, priv->gc);
 
+        priv->mapped = FALSE;
+
+        if (priv->terminal)
+                g_object_unref(priv->terminal);
+
         if (priv->app)
                 g_object_unref(priv->app);
         if (priv->prefs)
@@ -207,6 +215,8 @@ static void kt_window_init(KtWindow *window)
         priv->surface = NULL;
         priv->cairo = NULL;
         priv->mapped = FALSE;
+
+        priv->terminal = NULL;
 }
 
 /* Public methods */
@@ -316,7 +326,12 @@ KtWindow *kt_window_new(KtApp *app,
                 goto failed;
         }
 
-        /* XXX: Create terminal */
+        /* Create terminal */
+        priv->terminal = kt_terminal_new(priv->prefs, priv->window);
+        if (priv->terminal == NULL) {
+                error("Could not create terminal.");
+                goto failed;
+        }
 
         /* Map the window */
         cookie = xcb_map_window(con, priv->window);
@@ -327,6 +342,9 @@ KtWindow *kt_window_new(KtApp *app,
         }
 
         xcb_flush(con);
+
+        /* The window is mapped now. */
+        priv->mapped = TRUE;
 
         return win;
 
