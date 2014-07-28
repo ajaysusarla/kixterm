@@ -21,141 +21,60 @@
  */
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <locale.h>
-#include <signal.h>
-#include <unistd.h>
-#include <errno.h>
 
-#include <sys/select.h>
+#include <sys/time.h>
 
-#include "kixterm.h"
-#include "kt-pref.h"
+#include <glib-unix.h>
+
 #include "kt-util.h"
-#include "kt-xcb.h"
-#include "kt-tty.h"
+#include "kt-app.h"
+#include "kt-prefs.h"
+#include "kt-font.h"
+#include "kt-color.h"
+#include "kt-window.h"
 
+#include <xcb/xcb_event.h>
 
-#define DEFAULT_X -1
-#define DEFAULT_Y -1
-#define DEFAULT_ROWS 24
-#define DEFAULT_COLS 80
-#define DEFAULT_BORDER_WD 2
-#define DEFAULT_SCROLLBAR_WD 10
+/* The Glib main loop variables */
+static GMainLoop *loop = NULL;
+static struct timeval last_wakeup; /* time of last wakeup */
+static float main_loop_iteration_limit = 0.1; /* Current main loop's runtime limit*/
 
+struct kixterm_t {
+        KtApp *app;/* App instance */
+        KtPrefs *prefs; /* Preferences instance */
+        KtWindow *win;
+        KtFont *font;
+        KtColor *color;
+};
 
-/* Global kixterm configuration */
-kixterm_t conf;
-kt_window_t window;
-kixterm_prefs prefs, default_prefs;
+struct kixterm_t kixterm;
 
+/* The cleanup method is called before exiting */
 static void cleanup(void)
 {
-        kt_xcb_destroy();
+        debug("Cleaning up....");
+        g_object_unref(kixterm.app);
+        g_object_unref(kixterm.prefs);
+        g_object_unref(kixterm.win);
+        g_object_unref(kixterm.color);
+        debug("...Done!!");
 }
 
-static void signal_handler(int signal)
+/* Signal handlers */
+static void signal_fatal(int signal)
 {
-        if (signal == SIGINT) {
-                printf("SIGINT handled\n");
-                goto success;
-        } else if (signal == SIGTERM) {
-                printf("SIGTERM handled\n");
-                goto success;
-        } else {
-                fprintf(stderr, "Unhandled signal.\n");
-        }
-
-success:
-        exit(EXIT_SUCCESS);
+        error("signal %d. Bailing out!!", signal);
 }
 
-static void kixterm_init(void)
+static gboolean signal_handler(gpointer data)
 {
-        xcb_generic_error_t *error = NULL;
-        uint32_t win_values[] = {
-                kt_xcb_get_color(),
-                XCB_GRAVITY_NORTH_WEST,
-                XCB_GRAVITY_NORTH_WEST,
-                XCB_BACKING_STORE_NOT_USEFUL,
-                0,
-                XCB_EVENT_MASK_KEY_PRESS |
-                XCB_EVENT_MASK_KEY_RELEASE |
-                XCB_EVENT_MASK_STRUCTURE_NOTIFY |
-                XCB_EVENT_MASK_FOCUS_CHANGE |
-                XCB_EVENT_MASK_ENTER_WINDOW |
-                XCB_EVENT_MASK_LEAVE_WINDOW |
-                XCB_EVENT_MASK_EXPOSURE |
-                XCB_EVENT_MASK_POINTER_MOTION_HINT |
-                XCB_EVENT_MASK_POINTER_MOTION |
-                XCB_EVENT_MASK_BUTTON_PRESS |
-                XCB_EVENT_MASK_BUTTON_RELEASE,
-                conf.cursor[CUR_NORMAL]
-        };
-        uint32_t gc_values[] = {
-                kt_xcb_get_visual_bell_color(),
-                0
-        };
-
-        window.geometry.width = 2 * DEFAULT_BORDER_WD + DEFAULT_COLS * conf.font->width + DEFAULT_SCROLLBAR_WD;
-        window.geometry.height = 2 * DEFAULT_BORDER_WD + DEFAULT_ROWS * conf.font->height;
-
-        window.window = xcb_generate_id(conf.connection);
-
-        window.cookie = xcb_create_window_checked(conf.connection,
-                                                  conf.screen->root_depth,
-                                                  window.window,
-                                                  conf.screen->root,
-                                                  DEFAULT_X, DEFAULT_Y,
-                                                  window.geometry.width,
-                                                  window.geometry.height,
-                                                  0,
-                                                  XCB_WINDOW_CLASS_INPUT_OUTPUT,
-                                                  conf.screen->root_visual,
-                                                  XCB_CW_BACK_PIXEL  |
-                                                  XCB_CW_BIT_GRAVITY |
-                                                  XCB_CW_WIN_GRAVITY |
-                                                  XCB_CW_BACKING_STORE |
-                                                  XCB_CW_SAVE_UNDER |
-                                                  XCB_CW_EVENT_MASK |
-                                                  XCB_CW_CURSOR,
-                                                  win_values);
-
-
-        error = xcb_request_check(conf.connection, window.cookie);
-        if (error) {
-                 xcb_destroy_window(conf.connection, window.window);
-                 error("could not create a window(%d).. Exiting!!", error->error_code);
-         }
-
-        window.gc = xcb_generate_id(conf.connection);
-        window.cookie = xcb_create_gc_checked(conf.connection,
-                                              window.gc,
-                                              window.window,
-                                              XCB_GC_FOREGROUND | XCB_GC_GRAPHICS_EXPOSURES,
-                                              gc_values);
-        error = xcb_request_check(conf.connection, window.cookie);
-        if (error) {
-                fprintf(stderr, "Could not create a GC...Exiting!!\n");
-                xcb_destroy_window(conf.connection, window.window); /* XXX: Move 'window' to conf?? */
-                exit(EXIT_FAILURE);
-        }
-
-        /* Create terminal */
-        kt_tty_init(window.window);
-
-        /* Map the window */
-        window.cookie = xcb_map_window_checked(conf.connection, window.window);
-        error = xcb_request_check(conf.connection, window.cookie);
-        if (error) {
-                fprintf(stderr, "Could not map window... Exiting!!\n");
-                exit(EXIT_FAILURE);
-        }
-
-        xcb_flush(conf.connection);
+        g_main_loop_quit(loop);
+        return TRUE;
 }
 
-static void handle_x_response(uint8_t response_type, xcb_generic_event_t *event)
+static void handle_x_event(guint8 response_type, xcb_generic_event_t *event)
 {
         switch(response_type) {
         case XCB_KEY_PRESS:
@@ -189,10 +108,10 @@ static void handle_x_response(uint8_t response_type, xcb_generic_event_t *event)
                 fprintf(stdout, "XCB_FOCUS_OUT.\n");
                 break;
         case XCB_MAP_NOTIFY:
-                kt_xcb_map_notify((xcb_map_notify_event_t *) event);
+                fprintf(stdout, "XCB_MAP_NOTIFY.\n");
                 break;
         case XCB_UNMAP_NOTIFY:
-                kt_xcb_unmap_notify((xcb_unmap_notify_event_t *) event);
+                fprintf(stdout, "XCB_UNMAP_NOTIFY.\n");
                 break;
         case XCB_CONFIGURE_NOTIFY:
                 fprintf(stdout, "XCB_CONFIGURE_NOTIFY.\n");
@@ -223,121 +142,126 @@ static void handle_x_response(uint8_t response_type, xcb_generic_event_t *event)
         }
 }
 
-static void handle_from_x(void)
+static gboolean kt_xcb_io_cb(GIOChannel *source, GIOCondition cond, gpointer data)
 {
-        xcb_generic_event_t *event = NULL;
+        /* All XCB events should have been handled by kt_poll()->kt_xcb_handler()
+         */
+        xcb_connection_t *connection;
 
-        while (1) {
-                uint8_t response_type;
+        debug("XCB IO handler.");
 
-                event = xcb_poll_for_event(conf.connection);
+        connection = kt_app_get_x_connection(kixterm.app);
 
-                if (event == NULL)
-                        break;
-
-                response_type = XCB_EVENT_RESPONSE_TYPE(event);
-                if (response_type != 0)
-                        handle_x_response(response_type, event);
-        }
-
-        if (xcb_connection_has_error(conf.connection)) {
-                error("Error with X connection.");
+        if (xcb_connection_has_error(connection)) {
+                error("Connection problem with X server. Error: %d",
+                      xcb_connection_has_error(connection));
                 exit(EXIT_FAILURE);
         }
 
-        if (event)
-                free(event);
+        return TRUE;
 }
 
-static void handle_from_tty(void)
+static void kt_xcb_event_handler(xcb_connection_t *c)
 {
-        static char buf[BUFSIZ];
-        static int buflen = 0;
-        char *str;
-        int ret, c;
+        xcb_generic_event_t *event = NULL;
 
-        debug("enter..");
-//        while (1) {
-        debug("read..");
-                ret = read(conf.mfd, buf+buflen, (sizeof(buf)/sizeof(buf[0])) - buflen);
-                if (ret < 0) {
-                        /* TODO:Handle Errors from `errno` here*/
-                        error("read() from shell failed.");
+        while((event = xcb_poll_for_event(c))) {
+                guint8 response_type;
+
+                response_type = XCB_EVENT_RESPONSE_TYPE(event);
+                if (response_type != 0) {
+                        handle_x_event(response_type, event);
                 }
-//        }
-                debug("read done..");
-
-        buflen += ret;
-        str = buf;
-
-        memmove (buf, str, buflen);
-        /*
-        while () {
         }
-        */
-//        printf(">> %s <<\n", str);
 
-        if (window.mapped) {
-                debug("calling kt_xcb_write_to_term");
-                kt_xcb_write_to_term(str, buflen);
-                //kt_xcb_write_to_term("Partha", 6);
-        }
-        debug("return..");
+        xcb_flush(c);
 }
 
-static void kixterm_main_loop(void)
+/* GMainLoop handler (From awesome.c - awesome project) */
+static gint kt_poll(GPollFD *udfs, guint nfsd, gint timeout)
 {
-        int xfd = conf.xfd;
-        int mfd = conf.mfd;
-        fd_set fds;
-        struct timeval *tv = NULL;
+        guint res;
+        struct timeval now, length_time;
+        float length;
+        xcb_connection_t *connection;
 
-        while (1) {
-                FD_ZERO(&fds);
-                FD_SET(mfd, &fds);
-                FD_SET(xfd, &fds);
+        connection = kt_app_get_x_connection(kixterm.app);
 
-                if (select(MAX(xfd, mfd)+1, &fds, NULL, NULL, tv) < 0) {
-                        if (errno == EINTR)
-                                continue;
+        xcb_flush(connection);
 
-                        error("select() failed.");
-                }
-
-                if (FD_ISSET(mfd, &fds)) {
-                        debug("from the master..");
-                        handle_from_tty();
-                }
-
-                if (FD_ISSET(xfd, &fds)) {
-                        debug("from X..");
-                        handle_from_x();
-                        xcb_flush(conf.connection);
-                }
+        /* Duration of the main loop iteration */
+        gettimeofday(&now, NULL);
+        timersub(&now, &last_wakeup, &length_time);
+        length = length_time.tv_sec + length_time.tv_usec * 1.0f / 1e6;
+        if (length > main_loop_iteration_limit) {
+                warn("Last main loop iteration took %.6f seconds!"
+                     "Increasing limit for this warning to that value.", length);
+                main_loop_iteration_limit = length;
         }
 
-        return;
+        /* Do the actual polling */
+        res = g_poll(udfs, nfsd, timeout);
+        gettimeofday(&last_wakeup, NULL);
+
+        kt_xcb_event_handler(connection);
+
+        return res;
 }
 
+/* The main() function. */
 int main(int argc, char **argv)
 {
-        /* Cleanup and signal handling */
-        atexit(cleanup);
-        signal(SIGTERM, signal_handler);
-        signal(SIGINT, signal_handler);
+        struct sigaction sa;
+        GIOChannel *channel;
 
-        /* Set the right locale */
         setlocale(LC_CTYPE, "");
 
-        MEMSET(&conf, 1);
-        MEMSET(&prefs, 1);
-        MEMSET(&default_prefs, 1);
+        /* Cleanup and signal handling */
+        atexit(cleanup);
 
-        kt_xcb_init();
+        g_unix_signal_add(SIGINT, signal_handler, NULL);
+        g_unix_signal_add(SIGTERM, signal_handler, NULL);
 
-        kixterm_init();
 
-        kixterm_main_loop();
+        sa.sa_handler = signal_fatal;
+        sa.sa_flags = SA_RESETHAND;
+        sigemptyset(&sa.sa_mask);
+        sigaction(SIGABRT, &sa, 0);
+        sigaction(SIGBUS, &sa, 0);
+        sigaction(SIGFPE, &sa, 0);
+        sigaction(SIGILL, &sa, 0);
+        sigaction(SIGSEGV, &sa, 0);
+
+        /* App core */
+        kixterm.app = kt_app_new();
+        /* Preferences */
+        kixterm.prefs = kt_prefs_new();
+        /* Font */
+        kixterm.font = kt_font_new(kixterm.app, kixterm.prefs);
+        /* Color */
+        kixterm.color = kt_color_new(kixterm.app, kixterm.prefs);
+        /* Main window */
+        kixterm.win = kt_window_new(kixterm.app,
+                                    kixterm.prefs,
+                                    kixterm.font,
+                                    kixterm.color);
+
+        /* Watch the X file descriptor for events */
+        channel = g_io_channel_unix_new(kt_app_get_xfd(kixterm.app));
+        g_io_add_watch(channel, G_IO_IN, kt_xcb_io_cb, NULL);
+        g_io_channel_unref(channel);
+
+        /* Main context */
+        g_main_context_set_poll_func(g_main_context_default(), &kt_poll);
+
+        /* main event loop */
+        loop = g_main_loop_new(NULL, FALSE);
+
+        g_main_loop_run(loop);
+
+        /* Cleanup */
+        g_main_loop_unref(loop);
+        loop = NULL;
 
         exit(EXIT_SUCCESS);
 }
