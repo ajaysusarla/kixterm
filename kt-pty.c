@@ -26,6 +26,10 @@
 #include <unistd.h>
 #include <pty.h>
 #include <sys/wait.h>
+#include <fcntl.h>
+
+#include <pwd.h>
+#include <sys/types.h>
 
 struct _KtPtyPriv {
         GString *wid;
@@ -50,7 +54,20 @@ static void kt_pty_child_watch_cb(GPid pid,
                                   int status,
                                   KtPty *pty)
 {
-        /* XXX: TODO: Please implement this */
+        KtPtyPriv *priv;
+        int stat = 0;
+
+        priv = pty->priv;
+
+        if (waitpid(priv->ppid, &stat, 0) < 0) {
+                error("waitpid() failed.");
+                exit(EXIT_FAILURE);
+        }
+
+        if (WIFEXITED(stat))
+                exit(WEXITSTATUS(stat));
+        else
+                exit(EXIT_FAILURE);
 }
 
 static void kt_pty_watch_child(KtPty *pty, pid_t child_pid)
@@ -72,20 +89,79 @@ static gboolean kt_pty_io_read(GIOChannel *source,
                                KtPty *pty)
 {
         gboolean eof;
+        static guchar buf[1000];
+        static int buflen = 0;
+        KtPtyPriv *priv = pty->priv;
+        guchar *str;
+        int ret;
+        int fd;
 
         debug("Need to handle data.");
 
         eof = cond & G_IO_HUP;
 
+        fd = g_io_channel_unix_get_fd(source);
+
         if (cond & G_IO_IN) {
+                do {
+                        ret = read(fd, buf+buflen, (sizeof(buf)/sizeof(buf[0])) - buflen);
+                        if (ret < 0)
+                                break;
+
+                        fprintf(stdout, "%s", buf);
+                } while (1);
+                buflen += ret;
+                str = buf;
         }
 
         return TRUE;
 }
 
-static void kt_input_source_destroy(KtPty *pty)
+static void kt_pty_input_source_destroy(KtPty *pty)
 {
         debug("TODO: Destroy input source.");
+}
+
+static void kt_pty_exec_shell(gchar *wid, gchar **args)
+{
+        const struct passwd *passwd = getpwuid(getuid());
+        gchar *shell = NULL;
+
+        debug("Entering..");
+
+        unsetenv("COLUMNS");
+        unsetenv("LINES");
+        unsetenv("TERMCAP");
+
+        if (passwd) {
+                setenv("LOGNAME", passwd->pw_name, 1);
+                setenv("USER", passwd->pw_name, 1);
+                setenv("SHELL", passwd->pw_shell, 0);
+                setenv("HOME", passwd->pw_dir, 0);
+        }
+
+        setenv("WINDOWID", wid, 1);
+        setenv("TERM", "linux", 1);
+
+        signal(SIGCHLD, SIG_DFL);
+        signal(SIGHUP, SIG_DFL);
+        signal(SIGINT, SIG_DFL);
+        signal(SIGQUIT, SIG_DFL);
+        signal(SIGTERM, SIG_DFL);
+        signal(SIGALRM, SIG_DFL);
+
+        shell = getenv("SHELL");
+        if (shell == NULL) {
+                shell = "/bin/sh";
+        }
+
+        args = (char *[]){shell, "-i", NULL};
+
+        debug("calling execvp");
+        execvp(args[0], args);
+        debug("return execvp\n");
+
+        exit(EXIT_FAILURE);
 }
 
 /* Class methods */
@@ -184,6 +260,7 @@ KtPty *kt_pty_new(KtPrefs *prefs, xcb_window_t wid)
         /* Window ID is typically 8 digits. */
         gchar buf[sizeof(long) * 8 + 1];
         struct winsize wsize;
+        long flags;
 
         g_return_val_if_fail(KT_IS_PREFS(prefs), NULL);
 
@@ -229,22 +306,28 @@ KtPty *kt_pty_new(KtPrefs *prefs, xcb_window_t wid)
                 close(slave);
                 close(master);
                 debug("Child process: Calling exec shell...");
-                /* XXX:Call exec() here ...*/
+                kt_pty_exec_shell(priv->wid->str, NULL);
                 break;
         default: /* Parent */
                 debug("Parent process...");
                 close(slave);
                 priv->fd = master;
-                kt_pty_watch_child(pty, priv->ppid);
+
                 priv->channel = g_io_channel_unix_new(priv->fd);
                 g_io_channel_set_close_on_unref(priv->channel, FALSE);
+
+                flags = fcntl(priv->fd, F_GETFL);
+                if ((flags & O_NONBLOCK) == 0)
+                        fcntl(priv->fd, F_SETFL, flags | O_NONBLOCK);
 
                 g_io_add_watch_full(priv->channel,
                                     G_PRIORITY_DEFAULT_IDLE,
                                     G_IO_IN | G_IO_HUP,
                                     (GIOFunc) kt_pty_io_read,
                                     pty,
-                                    (GDestroyNotify)kt_input_source_destroy);
+                                    (GDestroyNotify)kt_pty_input_source_destroy);
+
+                kt_pty_watch_child(pty, priv->ppid);
                 break;
         }
 
