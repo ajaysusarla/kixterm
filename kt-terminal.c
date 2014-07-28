@@ -21,9 +21,10 @@
  */
 
 #include "kt-terminal.h"
+#include "kt-pty.h"
 
 struct _KtTerminalPriv {
-        xcb_window_t wid;
+        KtPty *pty;
 
         /* Properties */
         KtPrefs *prefs;
@@ -82,6 +83,9 @@ static void kt_terminal_finalize(GObject *object)
         KtTerminal *term = KT_TERMINAL(object);
         KtTerminalPriv *priv = term->priv;
 
+        if (priv->pty)
+                g_object_unref(priv->pty);
+
         if (priv->prefs)
                 g_object_unref(priv->prefs);
 
@@ -105,6 +109,8 @@ static void kt_terminal_class_init(KtTerminalClass *klass)
                                                             G_PARAM_CONSTRUCT_ONLY |
                                                             G_PARAM_READWRITE));
 
+        /* TODO:Setup signal handlers */
+
         g_type_class_add_private(klass, sizeof(KtTerminalPriv));
 }
 
@@ -117,13 +123,14 @@ static void kt_terminal_init(KtTerminal *term)
                                                  KtTerminalPriv);
         priv = term->priv;
 
-        priv->wid = -1;
+        priv->pty = NULL;
 }
 
 /* Public methods */
 KtTerminal *kt_terminal_new(KtPrefs *prefs, xcb_window_t wid)
 {
         KtTerminal *terminal = NULL;
+        KtTerminalPriv *priv = NULL;
 
         g_return_val_if_fail(KT_IS_PREFS(prefs), NULL);
 
@@ -131,5 +138,17 @@ KtTerminal *kt_terminal_new(KtPrefs *prefs, xcb_window_t wid)
                                 "kt-prefs", prefs,
                                 NULL);
 
+        priv = terminal->priv;
+
+        priv->pty = kt_pty_new(prefs, wid);
+        if (priv->pty == NULL) {
+                error("Could not create terminal.");
+                goto failed;
+        }
+
         return terminal;
+
+failed:
+        g_object_unref(terminal);
+        return NULL;
 }
