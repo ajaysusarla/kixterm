@@ -32,6 +32,7 @@ struct _KtWindowPriv {
         xcb_gcontext_t gc;
         xcb_rectangle_t geometry;
 
+        /* Rendering */
         xcb_pixmap_t pixmap;
         cairo_surface_t *surface;
         cairo_t *cairo;
@@ -57,6 +58,72 @@ enum {
 G_DEFINE_TYPE(KtWindow, kt_window, G_TYPE_OBJECT);
 
 /* Private methods */
+static void render_pixmap(KtWindow *window)
+{
+        KtWindowPriv *priv = window->priv;
+
+        priv->cairo = cairo_create(priv->surface);
+        cairo_set_line_width(priv->cairo, 1.0);
+
+        cairo_save(priv->cairo);
+        {
+                g_assert(cairo_status(priv->cairo) == 0);
+
+                /* TODO: Draw the terminal buffer contents here */
+
+                g_assert(cairo_status(priv->cairo) == 0);
+        }
+        cairo_restore(priv->cairo);
+        cairo_destroy(priv->cairo);
+        priv->cairo = NULL;
+
+        cairo_surface_flush(priv->surface);
+
+        g_assert(cairo_surface_status(priv->surface) == CAIRO_STATUS_SUCCESS);
+}
+
+static void create_pixmap_and_cairo_surface(KtWindow *window)
+{
+        KtWindowPriv *priv = window->priv;
+        xcb_void_cookie_t cookie;
+        xcb_generic_error_t *error = NULL;
+        xcb_connection_t *con;
+        xcb_screen_t *screen;
+        xcb_visualtype_t *visual;
+
+        con = kt_app_get_x_connection(priv->app);
+        screen = kt_app_get_screen(priv->app);
+        visual = kt_app_get_visual(priv->app);
+
+        priv->pixmap = xcb_generate_id(con);
+
+        cookie = xcb_create_pixmap_checked(con,
+                                           screen->root_depth,
+                                           priv->pixmap,
+                                           screen->root,
+                                           priv->geometry.width,
+                                           priv->geometry.height);
+
+        error = xcb_request_check(con, cookie);
+        if (error) {
+                error("Could not create pixmap...Exiting!!");
+                return;
+        }
+
+        priv->surface = cairo_xcb_surface_create(con,
+                                                 priv->pixmap,
+                                                 visual,
+                                                 priv->geometry.width,
+                                                 priv->geometry.height);
+        if (priv->surface == NULL) {
+                error("Could not create cairo surface...Exiting!");
+                return;
+        }
+
+        g_assert(cairo_surface_status(priv->surface) == CAIRO_STATUS_SUCCESS);
+
+        render_pixmap(window);
+}
 
 /* Class methods */
 static void kt_window_get_property(GObject *obj,
@@ -343,9 +410,6 @@ KtWindow *kt_window_new(KtApp *app,
 
         xcb_flush(con);
 
-        /* The window is mapped now. */
-        priv->mapped = TRUE;
-
         return win;
 
 failed:
@@ -353,3 +417,99 @@ failed:
         error("Failed to create kixterm window\n");
         return NULL;
 }
+
+void kt_window_key_press(KtWindow *window, xcb_key_press_event_t *event)
+{
+}
+
+void kt_window_key_release(KtWindow *window, xcb_key_release_event_t *event)
+{
+}
+
+void kt_window_button_press(KtWindow *window, xcb_button_press_event_t *event)
+{
+}
+
+void kt_window_button_release(KtWindow *window, xcb_button_release_event_t *event)
+{
+}
+
+void kt_window_motion_notify(KtWindow *window, xcb_motion_notify_event_t *event)
+{
+}
+
+void kt_window_expose(KtWindow *window, xcb_expose_event_t *event)
+{
+}
+
+void kt_window_enter_notify(KtWindow *window, xcb_enter_notify_event_t *event)
+{
+}
+
+void kt_window_leave_notify(KtWindow *window, xcb_leave_notify_event_t *event)
+{
+}
+
+void kt_window_focus_in(KtWindow *window, xcb_focus_in_event_t *event)
+{
+}
+
+void kt_window_focus_out(KtWindow *window, xcb_focus_out_event_t *event)
+{
+}
+
+void kt_window_map_notify(KtWindow *window, xcb_map_notify_event_t *event)
+{
+        KtWindowPriv *priv;
+
+        g_return_if_fail(KT_IS_WINDOW(window));
+
+        priv = window->priv;
+
+        if (priv->mapped == TRUE) {
+                error("Window already mapped.");
+                return;
+        }
+
+        /* The window is mapped now. */
+        priv->mapped = TRUE;
+
+        create_pixmap_and_cairo_surface(window);
+}
+
+void kt_window_unmap_notify(KtWindow *window, xcb_unmap_notify_event_t *event)
+{
+}
+
+void kt_window_configure_notify(KtWindow *window, xcb_configure_notify_event_t *event)
+{
+}
+
+void kt_window_destroy_notify(KtWindow *window, xcb_destroy_notify_event_t *event)
+{
+}
+
+void kt_window_selection_clear(KtWindow *window, xcb_selection_clear_event_t *event)
+{
+}
+
+void kt_window_selection_notify(KtWindow *window, xcb_selection_notify_event_t *event)
+{
+}
+
+void kt_window_selection_request(KtWindow *window, xcb_selection_request_event_t *event)
+{
+}
+
+void kt_window_client_message(KtWindow *window, xcb_client_message_event_t *event)
+{
+}
+
+void kt_window_reparent_notify(KtWindow *window, xcb_reparent_notify_event_t *event)
+{
+}
+
+void kt_window_property_notify(KtWindow *window, xcb_property_notify_event_t *event)
+{
+}
+

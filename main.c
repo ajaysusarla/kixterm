@@ -78,64 +78,84 @@ static void handle_x_event(guint8 response_type, xcb_generic_event_t *event)
 {
         switch(response_type) {
         case XCB_KEY_PRESS:
-                fprintf(stdout, "XCB_KEY_PRESS.\n");
+                kt_window_key_press(kixterm.win,
+                                    (xcb_key_press_event_t *)event);
                 break;
         case XCB_KEY_RELEASE:
-                fprintf(stdout, "XCB_KEY_RELEASE.\n");
+                kt_window_key_release(kixterm.win,
+                                      (xcb_key_release_event_t *)event);
                 break;
         case XCB_BUTTON_PRESS:
-                fprintf(stdout, "XCB_BUTTON_PRESS.\n");
+                kt_window_button_press(kixterm.win,
+                                       (xcb_button_press_event_t *)event);
                 break;
         case XCB_BUTTON_RELEASE:
-                fprintf(stdout, "XCB_BUTTON_RELEASE.\n");
+                kt_window_button_release(kixterm.win,
+                                         (xcb_button_release_event_t *)event);
                 break;
         case XCB_MOTION_NOTIFY:
-                fprintf(stdout, "XCB_MOTION_NOTIFY.\n");
+                kt_window_motion_notify(kixterm.win,
+                                        (xcb_motion_notify_event_t *)event);
                 break;
         case XCB_EXPOSE:
-                fprintf(stdout, "XCB_EXPOSE.\n");
+                kt_window_expose(kixterm.win,
+                                 (xcb_expose_event_t *)event);
                 break;
         case XCB_ENTER_NOTIFY:
-                fprintf(stdout, "XCB_ENTER_NOTIFY.\n");
+                kt_window_enter_notify(kixterm.win,
+                                       (xcb_enter_notify_event_t *)event);
                 break;
         case XCB_LEAVE_NOTIFY:
-                fprintf(stdout, "XCB_LEAVE_NOTIFY.\n");
+                kt_window_leave_notify(kixterm.win,
+                                       (xcb_leave_notify_event_t *)event);
                 break;
         case XCB_FOCUS_IN:
-                fprintf(stdout, "XCB_FOCUS_IN.\n");
+                kt_window_focus_in(kixterm.win,
+                                   (xcb_focus_in_event_t *)event);
                 break;
         case XCB_FOCUS_OUT:
-                fprintf(stdout, "XCB_FOCUS_OUT.\n");
+                kt_window_focus_out(kixterm.win,
+                                   (xcb_focus_out_event_t *)event);
                 break;
         case XCB_MAP_NOTIFY:
-                fprintf(stdout, "XCB_MAP_NOTIFY.\n");
+                kt_window_map_notify(kixterm.win,
+                                     (xcb_map_notify_event_t *)event);
                 break;
         case XCB_UNMAP_NOTIFY:
-                fprintf(stdout, "XCB_UNMAP_NOTIFY.\n");
+                kt_window_unmap_notify(kixterm.win,
+                                     (xcb_unmap_notify_event_t *)event);
                 break;
         case XCB_CONFIGURE_NOTIFY:
-                fprintf(stdout, "XCB_CONFIGURE_NOTIFY.\n");
+                kt_window_configure_notify(kixterm.win,
+                                           (xcb_configure_notify_event_t *)event);
                 break;
         case XCB_DESTROY_NOTIFY:
-                fprintf(stdout, "XCB_DESTROY_NOTIFY.\n");
+                kt_window_destroy_notify(kixterm.win,
+                                         (xcb_destroy_notify_event_t *)event);
                 break;
         case XCB_SELECTION_CLEAR:
-                fprintf(stdout, "XCB_SELECTION_CLEAR.\n");
+                kt_window_selection_clear(kixterm.win,
+                                          (xcb_selection_clear_event_t *)event);
                 break;
         case XCB_SELECTION_NOTIFY:
-                fprintf(stdout, "XCB_SELECTION_NOTIFY.\n");
+                kt_window_selection_notify(kixterm.win,
+                                           (xcb_selection_notify_event_t *)event);
                 break;
         case XCB_SELECTION_REQUEST:
-                fprintf(stdout, "XCB_SELECTION_REQUEST.\n");
+                kt_window_selection_request(kixterm.win,
+                                            (xcb_selection_request_event_t *)event);
                 break;
         case XCB_CLIENT_MESSAGE:
-                fprintf(stdout, "XCB_CLIENT_MESSAGE.\n");
+                kt_window_client_message(kixterm.win,
+                                         (xcb_client_message_event_t *)event);
                 break;
         case XCB_REPARENT_NOTIFY:
-                fprintf(stdout, "XCB_REPARENT_NOTIFY.\n");
+                kt_window_reparent_notify(kixterm.win,
+                                          (xcb_reparent_notify_event_t *)event);
                 break;
         case XCB_PROPERTY_NOTIFY:
-                fprintf(stdout, "XCB_PROPERTY_NOTIFY.\n");
+                kt_window_property_notify(kixterm.win,
+                                          (xcb_property_notify_event_t *)event);
                 break;
         default:
                 break;
@@ -147,8 +167,6 @@ static gboolean kt_xcb_io_cb(GIOChannel *source, GIOCondition cond, gpointer dat
         /* All XCB events should have been handled by kt_poll()->kt_xcb_handler()
          */
         xcb_connection_t *connection;
-
-        debug("XCB IO handler.");
 
         connection = kt_app_get_x_connection(kixterm.app);
 
