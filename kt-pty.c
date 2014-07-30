@@ -35,7 +35,10 @@ struct _KtPtyPriv {
         GString *wid;
         pid_t ppid;
         pid_t cpid;
-        gint fd;
+        /* openpty fd */
+        gint mfd; /* masterfd */
+        gint sfd; /* slavefd */
+
         GIOChannel *channel;
 
         /* Properties */
@@ -164,6 +167,52 @@ static void kt_pty_exec_shell(gchar *wid, gchar **args)
         exit(EXIT_FAILURE);
 }
 
+/**
+ * pty_set_size: Set the window size of the pty
+ *
+ * Returns: TRUE if successful, FALSE if not.
+ */
+static gboolean pty_set_size(KtPty *pty, gint rows, gint cols)
+{
+        KtPtyPriv *priv = pty->priv;
+        struct winsize wsize;
+
+        MEMSET(&wsize, 1);
+
+        wsize.ws_row = rows;
+        wsize.ws_col = cols;
+        wsize.ws_xpixel = 0;
+        wsize.ws_ypixel = 0;
+
+        if (ioctl(priv->mfd, TIOCSWINSZ, &wsize) != 0) {
+                error("Could no set the window size of the pty.");
+                return FALSE;
+        }
+
+        return TRUE;
+}
+
+/**
+ * pty_create: Creates a pty using openpty()
+ *
+ * Returns: TRUE if successful, FALSE if not.
+ */
+static gboolean pty_create(KtPty *pty)
+{
+        KtPtyPriv *priv = pty->priv;
+        gint master, slave;
+
+        if (openpty(&master, &slave, NULL, NULL, NULL) < 0) {
+                error("Could not open pty. openpty() failed.");
+                return FALSE;
+        }
+
+        priv->mfd = master;
+        priv->sfd = slave;
+
+        return TRUE;
+}
+
 /* Class methods */
 static void kt_pty_get_property(GObject *obj,
                                 guint param_id,
@@ -208,6 +257,16 @@ static void kt_pty_finalize(GObject *object)
         KtPty *pty = KT_PTY(object);
         KtPtyPriv *priv = pty->priv;
 
+        if (priv->mfd) {
+                close(priv->mfd);
+                priv->mfd = -1;
+        }
+
+        if (priv->sfd) {
+                close(priv->sfd);
+                priv->sfd = -1;
+        }
+
         if (priv->wid)
                 g_string_free(priv->wid, TRUE);
 
@@ -247,19 +306,21 @@ static void kt_pty_init(KtPty *pty)
 
         priv = pty->priv;
 
+        priv->mfd = -1;
+        priv->sfd = -1;
+
         priv->wid = NULL;
         priv->channel = NULL;
 }
 
 /* Public methods */
+
 KtPty *kt_pty_new(KtPrefs *prefs, xcb_window_t wid)
 {
         KtPty *pty = NULL;
         KtPtyPriv *priv;
-        gint master, slave;
         /* Window ID is typically 8 digits. */
         gchar buf[sizeof(long) * 8 + 1];
-        struct winsize wsize;
         long flags;
 
         g_return_val_if_fail(KT_IS_PREFS(prefs), NULL);
@@ -270,12 +331,6 @@ KtPty *kt_pty_new(KtPrefs *prefs, xcb_window_t wid)
 
         priv = pty->priv;
 
-        /* Window size */
-        wsize.ws_row = priv->prefs->rows;
-        wsize.ws_col = priv->prefs->cols;
-        wsize.ws_xpixel = 0;
-        wsize.ws_ypixel = 0;
-
         /* Window ID */
         MEMSET(buf, 1);
         g_snprintf(buf, sizeof(buf), "%lu", (unsigned long)wid);
@@ -283,8 +338,14 @@ KtPty *kt_pty_new(KtPrefs *prefs, xcb_window_t wid)
         MEMSET(buf, 1);
 
         /* Create pty */
-        if (openpty(&master, &slave, NULL, NULL, &wsize) < 0) {
+        if (!pty_create(pty)) {
                 error("Could not open pty. openpty() failed.");
+                goto failed;
+        }
+
+        /* Set pty size */
+        if (!pty_set_size(pty, priv->prefs->rows, priv->prefs->cols)) {
+                error("Could not set pty size.");
                 goto failed;
         }
 
@@ -296,29 +357,25 @@ KtPty *kt_pty_new(KtPrefs *prefs, xcb_window_t wid)
         case 0: /* Child */
                 debug("child process...");
                 setsid();
-                dup2(slave, STDIN_FILENO);
-                dup2(slave, STDOUT_FILENO);
-                dup2(slave, STDERR_FILENO);
-                if (ioctl(slave, TIOCSCTTY, NULL) < 0) {
+                dup2(priv->sfd, STDIN_FILENO);
+                dup2(priv->sfd, STDOUT_FILENO);
+                dup2(priv->sfd, STDERR_FILENO);
+                if (ioctl(priv->sfd, TIOCSCTTY, NULL) < 0) {
                         error("ioctl() for TIOSCTTY failed.");
                         goto failed;
                 }
-                close(slave);
-                close(master);
                 debug("Child process: Calling exec shell...");
                 kt_pty_exec_shell(priv->wid->str, NULL);
                 break;
         default: /* Parent */
                 debug("Parent process...");
-                close(slave);
-                priv->fd = master;
 
-                priv->channel = g_io_channel_unix_new(priv->fd);
+                priv->channel = g_io_channel_unix_new(priv->mfd);
                 g_io_channel_set_close_on_unref(priv->channel, FALSE);
 
-                flags = fcntl(priv->fd, F_GETFL);
+                flags = fcntl(priv->mfd, F_GETFL);
                 if ((flags & O_NONBLOCK) == 0)
-                        fcntl(priv->fd, F_SETFL, flags | O_NONBLOCK);
+                        fcntl(priv->mfd, F_SETFL, flags | O_NONBLOCK);
 
                 g_io_add_watch_full(priv->channel,
                                     G_PRIORITY_DEFAULT_IDLE,
@@ -336,4 +393,20 @@ KtPty *kt_pty_new(KtPrefs *prefs, xcb_window_t wid)
 failed:
         g_object_unref(pty);
         return NULL;
+}
+
+/**
+ * kt_pty_get_fd()
+ *
+ * Returns: The master fd of the pty.
+ */
+gint kt_pty_get_fd(KtPty *pty)
+{
+        KtPtyPriv *priv;
+
+        g_return_val_if_fail(KT_IS_PTY(pty), -1);
+
+        priv = pty->priv;
+
+        return priv->mfd;
 }

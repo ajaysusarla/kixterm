@@ -53,4 +53,5 @@ struct _KtPtyClass {
 GType kt_pty_get_type(void);
 KtPty *kt_pty_new(KtPrefs *prefs, xcb_window_t wid);
 
+gint kt_pty_get_fd(KtPty *pty);
 #endif /* KT_PTY_H */
