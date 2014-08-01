@@ -50,6 +50,11 @@ struct _KtTerminal {
 
 struct _KtTerminalClass {
         GObjectClass parent_class;
+
+        /* signals */
+        void (*copy)(KtTerminal *terminal);
+        void (*paste)(KtTerminal *terminal);
+        void (*child_exited)(KtTerminal *terminal, int status);
 };
 
 GType kt_terminal_get_type(void);

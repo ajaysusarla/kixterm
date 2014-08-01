@@ -31,15 +31,15 @@
 #include <pwd.h>
 #include <sys/types.h>
 
+#define SPAWN_FLAGS G_SPAWN_CHILD_INHERITS_STDIN | \
+        G_SPAWN_DO_NOT_REAP_CHILD
+
 struct _KtPtyPriv {
         GString *wid;
-        pid_t ppid;
-        pid_t cpid;
+        GPid cpid;
         /* openpty fd */
         gint mfd; /* masterfd */
         gint sfd; /* slavefd */
-
-        GIOChannel *channel;
 
         /* Properties */
         KtPrefs *prefs;
@@ -53,145 +53,6 @@ enum {
 G_DEFINE_TYPE(KtPty, kt_pty, G_TYPE_OBJECT);
 
 /* Private methods */
-static void kt_pty_child_watch_cb(GPid pid,
-                                  int status,
-                                  KtPty *pty)
-{
-        KtPtyPriv *priv;
-        int stat = 0;
-
-        priv = pty->priv;
-
-        if (waitpid(priv->ppid, &stat, 0) < 0) {
-                error("waitpid() failed.");
-                exit(EXIT_FAILURE);
-        }
-
-        if (WIFEXITED(stat))
-                exit(WEXITSTATUS(stat));
-        else
-                exit(EXIT_FAILURE);
-}
-
-static void kt_pty_watch_child(KtPty *pty, pid_t child_pid)
-{
-        KtPtyPriv *priv = pty->priv;
-
-        g_object_freeze_notify(G_OBJECT(pty));
-
-        g_child_watch_add_full(G_PRIORITY_HIGH,
-                               child_pid,
-                               (GChildWatchFunc)kt_pty_child_watch_cb,
-                               pty, NULL);
-
-        g_object_thaw_notify(G_OBJECT(pty));
-}
-
-static gboolean kt_pty_io_read(GIOChannel *source,
-                               GIOCondition cond,
-                               KtPty *pty)
-{
-        gboolean eof;
-        static guchar buf[1000];
-        static int buflen = 0;
-        KtPtyPriv *priv = pty->priv;
-        guchar *str;
-        int ret;
-        int fd;
-
-        debug("Need to handle data.");
-
-        eof = cond & G_IO_HUP;
-
-        fd = g_io_channel_unix_get_fd(source);
-
-        if (cond & G_IO_IN) {
-                do {
-                        ret = read(fd, buf+buflen, (sizeof(buf)/sizeof(buf[0])) - buflen);
-                        if (ret < 0)
-                                break;
-
-                        fprintf(stdout, "%s", buf);
-                } while (1);
-                buflen += ret;
-                str = buf;
-        }
-
-        return TRUE;
-}
-
-static void kt_pty_input_source_destroy(KtPty *pty)
-{
-        debug("TODO: Destroy input source.");
-}
-
-static void kt_pty_exec_shell(gchar *wid, gchar **args)
-{
-        const struct passwd *passwd = getpwuid(getuid());
-        gchar *shell = NULL;
-
-        debug("Entering..");
-
-        unsetenv("COLUMNS");
-        unsetenv("LINES");
-        unsetenv("TERMCAP");
-
-        if (passwd) {
-                setenv("LOGNAME", passwd->pw_name, 1);
-                setenv("USER", passwd->pw_name, 1);
-                setenv("SHELL", passwd->pw_shell, 0);
-                setenv("HOME", passwd->pw_dir, 0);
-        }
-
-        setenv("WINDOWID", wid, 1);
-        setenv("TERM", "linux", 1);
-
-        signal(SIGCHLD, SIG_DFL);
-        signal(SIGHUP, SIG_DFL);
-        signal(SIGINT, SIG_DFL);
-        signal(SIGQUIT, SIG_DFL);
-        signal(SIGTERM, SIG_DFL);
-        signal(SIGALRM, SIG_DFL);
-
-        shell = getenv("SHELL");
-        if (shell == NULL) {
-                shell = "/bin/sh";
-        }
-
-        args = (char *[]){shell, "-i", NULL};
-
-        debug("calling execvp");
-        execvp(args[0], args);
-        debug("return execvp\n");
-
-        exit(EXIT_FAILURE);
-}
-
-/**
- * pty_set_size: Set the window size of the pty
- *
- * Returns: TRUE if successful, FALSE if not.
- */
-static gboolean pty_set_size(KtPty *pty, gint rows, gint cols)
-{
-        KtPtyPriv *priv = pty->priv;
-        struct winsize wsize;
-
-        MEMSET(&wsize, 1);
-
-        wsize.ws_row = rows;
-        wsize.ws_col = cols;
-        wsize.ws_xpixel = 0;
-        wsize.ws_ypixel = 0;
-
-        if (ioctl(priv->mfd, TIOCSWINSZ, &wsize) != 0) {
-                error("Could no set the window size of the pty.");
-                return FALSE;
-        }
-
-        return TRUE;
-}
-
 /**
  * pty_create: Creates a pty using openpty()
  *
@@ -211,6 +72,44 @@ static gboolean pty_create(KtPty *pty)
         priv->sfd = slave;
 
         return TRUE;
+}
+
+static void pty_spawn_cb(KtPty *pty)
+{
+        KtPtyPriv *priv = pty->priv;
+
+        if (setsid() == -1) {
+                error("setsid() failed.");
+                exit(127);
+        }
+
+        /*
+        if (setpgid(0, 0) == -1) {
+                error("setpgid() failed.");
+                exit(127);
+        }
+        */
+
+        if (dup2(priv->sfd, STDIN_FILENO) != STDIN_FILENO) {
+                error("dup2() for STDIN_FILENO failed.");
+                exit(127);
+        }
+
+        if (dup2(priv->sfd, STDOUT_FILENO) != STDOUT_FILENO) {
+                error("dup2() for STDOUT_FILENO failed.");
+                exit(127);
+        }
+
+        if (dup2(priv->sfd, STDERR_FILENO) != STDERR_FILENO) {
+                error("dup2() for STDERR_FILENO failed.");
+                exit(127);
+        }
+
+        ioctl(priv->sfd, TIOCSCTTY, NULL);
+
+        /* Close the fd */
+        close(priv->sfd);
+        close(priv->mfd);
 }
 
 /* Class methods */
@@ -310,7 +209,6 @@ static void kt_pty_init(KtPty *pty)
         priv->sfd = -1;
 
         priv->wid = NULL;
-        priv->channel = NULL;
 }
 
 /* Public methods */
@@ -321,7 +219,6 @@ KtPty *kt_pty_new(KtPrefs *prefs, xcb_window_t wid)
         KtPtyPriv *priv;
         /* Window ID is typically 8 digits. */
         gchar buf[sizeof(long) * 8 + 1];
-        long flags;
 
         g_return_val_if_fail(KT_IS_PREFS(prefs), NULL);
 
@@ -341,51 +238,6 @@ KtPty *kt_pty_new(KtPrefs *prefs, xcb_window_t wid)
         if (!pty_create(pty)) {
                 error("Could not open pty. openpty() failed.");
                 goto failed;
-        }
-
-        /* Set pty size */
-        if (!pty_set_size(pty, priv->prefs->rows, priv->prefs->cols)) {
-                error("Could not set pty size.");
-                goto failed;
-        }
-
-        priv->ppid = fork();
-        switch (priv->ppid) {
-        case -1: /* Error */
-                error("fork() failed. Bailing...");
-                goto failed;
-        case 0: /* Child */
-                debug("child process...");
-                setsid();
-                dup2(priv->sfd, STDIN_FILENO);
-                dup2(priv->sfd, STDOUT_FILENO);
-                dup2(priv->sfd, STDERR_FILENO);
-                if (ioctl(priv->sfd, TIOCSCTTY, NULL) < 0) {
-                        error("ioctl() for TIOSCTTY failed.");
-                        goto failed;
-                }
-                debug("Child process: Calling exec shell...");
-                kt_pty_exec_shell(priv->wid->str, NULL);
-                break;
-        default: /* Parent */
-                debug("Parent process...");
-
-                priv->channel = g_io_channel_unix_new(priv->mfd);
-                g_io_channel_set_close_on_unref(priv->channel, FALSE);
-
-                flags = fcntl(priv->mfd, F_GETFL);
-                if ((flags & O_NONBLOCK) == 0)
-                        fcntl(priv->mfd, F_SETFL, flags | O_NONBLOCK);
-
-                g_io_add_watch_full(priv->channel,
-                                    G_PRIORITY_DEFAULT_IDLE,
-                                    G_IO_IN | G_IO_HUP,
-                                    (GIOFunc) kt_pty_io_read,
-                                    pty,
-                                    (GDestroyNotify)kt_pty_input_source_destroy);
-
-                kt_pty_watch_child(pty, priv->ppid);
-                break;
         }
 
         return pty;
@@ -409,4 +261,86 @@ gint kt_pty_get_fd(KtPty *pty)
         priv = pty->priv;
 
         return priv->mfd;
+}
+
+/**
+ * kt_pty_spawn: Spawn
+ *
+ * Returns: TRUE if successful, FALSE if not.
+ */
+gboolean kt_pty_spawn(KtPty *pty, gchar **args)
+{
+        KtPtyPriv *priv = pty->priv;
+        gboolean retval = FALSE;
+        GError *error = NULL;
+        GPid pid;
+        gchar *shell;
+
+        g_return_val_if_fail(KT_IS_PTY(pty), FALSE);
+
+        shell = getenv("SHELL");
+        if (shell == NULL) {
+                shell = "/bin/sh";
+        }
+
+        args = (char *[]){shell, "-i", NULL};
+
+
+        retval = g_spawn_async_with_pipes(NULL, /* Spawn in CWD */
+                                          args,
+                                          NULL, /* FIXME: Need to setup the child env*/
+                                          SPAWN_FLAGS,
+                                          (GSpawnChildSetupFunc)pty_spawn_cb,
+                                          pty,
+                                          &pid,
+                                          NULL, NULL, NULL,
+                                          &error);
+
+        if (!retval) {
+                error("Spawn failed: %s", error->message);
+                return FALSE;
+        }
+
+        priv->cpid = pid;
+
+        return TRUE;
+}
+
+/**
+ * kt_pty_set_size: Set the window size of the pty
+ *
+ * Returns: TRUE if successful, FALSE if not.
+ */
+gboolean kt_pty_set_size(KtPty *pty, gint rows, gint cols)
+{
+        KtPtyPriv *priv = pty->priv;
+        struct winsize wsize;
+
+        g_return_val_if_fail(KT_IS_PTY(pty), FALSE);
+
+        MEMSET(&wsize, 1);
+
+        wsize.ws_row = rows > 0 ? rows : 24;
+        wsize.ws_col = cols > 0 ? cols : 80;
+        wsize.ws_xpixel = 0;
+        wsize.ws_ypixel = 0;
+
+        debug("Settings pty size : %d x %d.", wsize.ws_row, wsize.ws_col);
+
+        if (ioctl(priv->mfd, TIOCSWINSZ, &wsize) != 0) {
+                error("Could no set the window size of the pty.");
+                return FALSE;
+        }
+
+        return TRUE;
+}
+
+/**
+ * kt_pty_get_child_pid()
+ */
+GPid kt_pty_get_child_pid(KtPty *pty)
+{
+        g_return_val_if_fail(KT_IS_PTY(pty), -1);
+
+        return pty->priv->cpid;
 }

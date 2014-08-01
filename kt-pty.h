@@ -54,4 +54,7 @@ GType kt_pty_get_type(void);
 KtPty *kt_pty_new(KtPrefs *prefs, xcb_window_t wid);
 
 gint kt_pty_get_fd(KtPty *pty);
+gboolean kt_pty_spawn(KtPty *pty, gchar **args);
+gboolean kt_pty_set_size(KtPty *pty, gint rows, gint cols);
+GPid kt_pty_get_child_pid(KtPty *pty);
 #endif /* KT_PTY_H */
