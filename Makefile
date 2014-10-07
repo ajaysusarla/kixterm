@@ -114,6 +114,7 @@ OBJS = \
 	kt-font.o \
 	kt-terminal.o \
 	kt-pty.o \
+	kt-buffer.o \
 	$(NULL)
 
 HEADERS = \
@@ -126,6 +127,7 @@ HEADERS = \
 	kt-font.h \
 	kt-terminal.h \
 	kt-pty.h \
+	kt-buffer.h \
 	$(NULL)
 
 DEPS = $(wildcard .dep/*.dep)
