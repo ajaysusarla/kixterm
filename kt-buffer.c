@@ -33,8 +33,6 @@ KtBuffer * kt_buffer_new(gconstpointer data, gsize length)
 {
         KtBufferPriv *priv = g_slice_new0(KtBufferPriv);
 
-
-        data = g_memdup(data, length);
         priv->buffer.data = data;
         priv->buffer.length = length;
         priv->refcount = 1;
@@ -56,7 +54,6 @@ void kt_buffer_free(KtBuffer *buffer)
         KtBufferPriv *priv = (KtBufferPriv *)buffer;
 
         if (!--priv->refcount) {
-                g_free((gpointer)priv->buffer.data);
                 g_slice_free(KtBufferPriv, priv);
         }
 }
