@@ -27,6 +27,7 @@
 #include <xcb/xcb.h>
 
 #include "kt-prefs.h"
+#include "kt-buffer.h"
 
 G_BEGIN_DECLS
 
@@ -55,6 +56,7 @@ struct _KtTerminalClass {
         void (*copy)(KtTerminal *terminal);
         void (*paste)(KtTerminal *terminal);
         void (*child_exited)(KtTerminal *terminal, int status);
+        void (*got_tty_data)(KtTerminal *terminal, KtBuffer *buffer);
 };
 
 GType kt_terminal_get_type(void);

@@ -24,6 +24,22 @@
 #include "kt-pty.h"
 
 #include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+
+#define BUF_SIZE 8192
+
+enum {
+        PROP_0,
+        PROP_KT_PREFS,
+        PROP_LAST
+};
+
+enum {
+        SIGNAL_CHILD_EXITED,
+        SIGNAL_GOT_TTY_DATA,
+        SIGNAL_LAST
+};
 
 struct _KtTerminalPriv {
         KtPty *pty;
@@ -38,12 +54,10 @@ struct _KtTerminalPriv {
         KtPrefs *prefs;
 };
 
-enum {
-        PROP_0,
-        PROP_KT_PREFS,
-};
-
 G_DEFINE_TYPE(KtTerminal, kt_terminal, G_TYPE_OBJECT);
+
+static guint signals[SIGNAL_LAST] = {0, };
+static GParamSpec *param_specs[PROP_LAST] = {NULL, };
 
 /* Private methods */
 static void terminal_set_size(KtTerminal *term)
@@ -68,8 +82,55 @@ static gboolean io_read_cb(GIOChannel *channel,
                            GIOCondition cond,
                            KtTerminal *term)
 {
+        int err = 0;
+        gboolean eof = FALSE;
+
         if (cond & G_IO_IN) {
+                guint32 data[BUF_SIZE];
                 int fd = g_io_channel_unix_get_fd(channel);
+
+                memset (&data, 0, BUF_SIZE);
+
+                do {
+                        int ret;
+
+                        ret = read(fd, data, BUF_SIZE - 1);
+                        if (ret == -1) {
+                                err = errno;
+                                break;
+                        } else if (ret == 0) {
+                                eof = TRUE;
+                                break;
+                        } else {
+                                KtBuffer *buffer = kt_buffer_new(data, ret);
+                                g_signal_emit(term,
+                                              signals[SIGNAL_GOT_TTY_DATA],
+                                              0,
+                                              buffer);
+                                kt_buffer_free(buffer);
+                        }
+
+
+                } while(1);
+        }
+
+        switch (err) {
+        case 0:
+                break;
+        case EIO:
+                eof = TRUE;
+                break;
+        case EAGAIN:
+        case EBUSY:
+                break;
+        default:
+                warn("error reading from child.", g_strerror(err));
+                break;
+        }
+
+        if (eof) {
+                /* FIXME: Need to signal eof here. */
+                return FALSE;
         }
 
         return TRUE;
@@ -92,17 +153,19 @@ static void terminal_setup_pty(KtTerminal *term)
 
         terminal_set_size(term);
 
-        priv->io_event_source = g_io_add_watch_full(priv->channel,
-                                                    G_PRIORITY_DEFAULT_IDLE,
-                                                    G_IO_IN | G_IO_HUP,
-                                                    (GIOFunc) io_read_cb,
-                                                    term,
-                                                    (GDestroyNotify)input_event_source_destroy);
+        if (priv->io_event_source == 0) {
+                priv->io_event_source = g_io_add_watch_full(priv->channel,
+                                                            G_PRIORITY_DEFAULT_IDLE,
+                                                            G_IO_IN | G_IO_HUP,
+                                                            (GIOFunc) io_read_cb,
+                                                            term,
+                                                            (GDestroyNotify)input_event_source_destroy);
+        }
 }
 
 static void terminal_emit_child_exited(KtTerminal *term, int status)
 {
-        g_signal_emit_by_name(term, "child-exited", status);
+        g_signal_emit(term, signals[SIGNAL_CHILD_EXITED], status);
 }
 
 static void child_watch_cb(GPid pid,
@@ -216,30 +279,47 @@ static void kt_terminal_class_init(KtTerminalClass *klass)
         oclass->set_property = kt_terminal_set_property;
         oclass->finalize = kt_terminal_finalize;
 
-        g_object_class_install_property(oclass,
-                                        PROP_KT_PREFS,
-                                        g_param_spec_object("kt-prefs",
-                                                            "Kixterm Preferences",
-                                                            "The KtPrefs object",
-                                                            KT_PREFS_TYPE,
-                                                            G_PARAM_CONSTRUCT_ONLY |
-                                                            G_PARAM_READWRITE));
+        param_specs[PROP_KT_PREFS] = g_param_spec_object("kt-prefs",
+                                                         "Kixterm Preferences",
+                                                         "The KtPrefs object",
+                                                         KT_PREFS_TYPE,
+                                                         G_PARAM_CONSTRUCT_ONLY |
+                                                         G_PARAM_READWRITE);
 
-        /* TODO:Setup signal handlers */
+        g_object_class_install_properties (oclass, PROP_LAST, param_specs);
+
         klass->child_exited = NULL;
         /**
            "child-exited" signal.
          */
-        g_signal_new("child-exited",
-                     G_OBJECT_CLASS_TYPE(klass),
-                     G_SIGNAL_RUN_LAST,
-                     G_STRUCT_OFFSET(KtTerminalClass, child_exited),
-                     NULL,
-                     NULL,
-                     g_cclosure_marshal_VOID__INT,
-                     G_TYPE_NONE,
-                     1,
-                     G_TYPE_INT);
+        signals[SIGNAL_CHILD_EXITED] =
+                g_signal_new("child-exited",
+                             G_TYPE_FROM_CLASS(klass),
+                             G_SIGNAL_RUN_LAST |
+                             G_SIGNAL_NO_RECURSE |
+                             G_SIGNAL_NO_HOOKS,
+                             G_STRUCT_OFFSET(KtTerminalClass, child_exited),
+                             NULL,
+                             NULL,
+                             g_cclosure_marshal_VOID__INT,
+                             G_TYPE_NONE,
+                             1,
+                             G_TYPE_INT);
+
+        /**
+           "got-tty-data" signal.
+         */
+        signals[SIGNAL_GOT_TTY_DATA] =
+                g_signal_new("got-tty-data",
+                             G_TYPE_FROM_CLASS(klass),
+                             G_SIGNAL_RUN_FIRST,
+                             G_STRUCT_OFFSET(KtTerminalClass, got_tty_data),
+                             NULL,
+                             NULL,
+                             NULL,
+                             G_TYPE_NONE,
+                             1,
+                             KT_TYPE_BUFFER | G_SIGNAL_TYPE_STATIC_SCOPE);
 
         g_type_class_add_private(klass, sizeof(KtTerminalPriv));
 }
