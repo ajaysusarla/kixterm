@@ -454,7 +454,7 @@ xcb_visualtype_t *kt_app_get_visual(KtApp *app)
 {
         KtAppPriv *priv;
 
-        g_return_val_if_fail(KT_IS_APP(app), -1);
+        g_return_val_if_fail(KT_IS_APP(app), NULL);
 
         priv = app->priv;
 
