@@ -149,4 +149,8 @@ clean:
 	$(Q)rm -f $(OBJS) *~ $(PROGRAM) po/*~
 	$(Q)rm -rf .dep
 
+.PHONY: check-syntax
+check-syntax:
+	gcc -Wall -Wextra -pedantic -fsyntax-only -Wno-variadic-macros -std=c99 $(HEADERS) $(CHK_SOURCES)
+
 -include $(DEPS)

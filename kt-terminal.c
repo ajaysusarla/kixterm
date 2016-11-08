@@ -89,7 +89,7 @@ static gboolean io_read_cb(GIOChannel *channel,
                 guint32 data[BUF_SIZE];
                 int fd = g_io_channel_unix_get_fd(channel);
 
-                memset (&data, 0, BUF_SIZE);
+                memset(&data, 0, BUF_SIZE);
 
                 do {
                         int ret;

@@ -23,6 +23,7 @@
 #include "kt-window.h"
 #include "kt-terminal.h"
 #include "kt-util.h"
+#include "kt-buffer.h"
 
 #include <xcb/xcb_icccm.h>
 #include <pango/pangocairo.h>
@@ -123,6 +124,30 @@ static void create_pixmap_and_cairo_surface(KtWindow *window)
         g_assert(cairo_surface_status(priv->surface) == CAIRO_STATUS_SUCCESS);
 
         render_pixmap(window);
+}
+
+static void
+kt_window_draw_fg(KtTerminal *term, KtBuffer *buffer, KtWindow *window)
+{
+        KtWindowPriv *priv = window->priv;
+
+        cairo_save(priv->cairo);
+        {
+                PangoLayout *layout;
+                layout = pango_cairo_create_layout(priv->cairo);
+        }
+        cairo_restore(priv->cairo);
+}
+
+static void
+on_tty_data_received(KtTerminal *term, KtBuffer *buffer, KtWindow *window)
+{
+        fprintf(stdout, "on_tty_data_received: %ld.\n",  buffer->length);
+        fprintf(stdout, "<< %s >>\n", buffer->data);
+
+        window->priv->cairo = cairo_create(window->priv->surface);
+        kt_window_draw_fg(term, buffer, window);
+        cairo_destroy(window->priv->cairo);
 }
 
 /* Class methods */
@@ -399,6 +424,8 @@ KtWindow *kt_window_new(KtApp *app,
                 error("Could not create terminal.");
                 goto failed;
         }
+        g_signal_connect(priv->terminal, "got-tty-data",
+                         G_CALLBACK(on_tty_data_received), win);
 
         /* Map the window */
         cookie = xcb_map_window(con, priv->window);
