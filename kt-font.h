@@ -31,7 +31,7 @@
 
 typedef struct _KtFont KtFont;
 typedef struct _KtFontClass KtFontClass;
-typedef struct _KtFontPriv KtFontPriv;
+typedef struct _KtFontPrivate KtFontPrivate;
 
 #define KT_FONT_TYPE (kt_font_get_type())
 #define KT_FONT(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), KT_FONT_TYPE, KtFont))
@@ -44,7 +44,7 @@ struct _KtFont {
         GObject parent_instance;
 
         /* <private> */
-        KtFontPriv *priv;
+        KtFontPrivate *priv;
 };
 
 struct _KtFontClass {

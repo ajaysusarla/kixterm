@@ -23,7 +23,7 @@
 #include "kt-color.h"
 
 
-struct _KtColorPriv {
+struct _KtColorPrivate {
         guint32 bg_pixel; /* The background pixel for the terminal */
         guint32 vb_pixel; /* The visual bell pixel */
 
@@ -38,7 +38,8 @@ enum {
         PROP_KT_PREFS,
 };
 
-G_DEFINE_TYPE(KtColor, kt_color, G_TYPE_OBJECT);
+G_DEFINE_TYPE_WITH_CODE(KtColor, kt_color, G_TYPE_OBJECT,
+                        G_ADD_PRIVATE(KtColor));
 
 /* Private methods */
 guint32 init_pixel(KtColor *color, kt_color_t c)
@@ -95,7 +96,7 @@ static void kt_color_get_property(GObject *obj,
                                   GParamSpec *pspec)
 {
         KtColor *color = KT_COLOR(obj);
-        KtColorPriv *priv = color->priv;
+        KtColorPrivate *priv = color->priv;
 
         switch(param_id) {
         case PROP_KT_APP:
@@ -116,7 +117,7 @@ static void kt_color_set_property(GObject *obj,
                                   GParamSpec *pspec)
 {
         KtColor *color = KT_COLOR(obj);
-        KtColorPriv *priv = color->priv;
+        KtColorPrivate *priv = color->priv;
 
         switch(param_id) {
         case PROP_KT_APP:
@@ -140,7 +141,7 @@ static void kt_color_set_property(GObject *obj,
 static void kt_color_finalize(GObject *object)
 {
         KtColor *color = KT_COLOR(object);
-        KtColorPriv *priv = color->priv;
+        KtColorPrivate *priv = color->priv;
 
         free_pixels(color);
 
@@ -178,17 +179,13 @@ static void kt_color_class_init(KtColorClass *klass)
                                                             KT_PREFS_TYPE,
                                                             G_PARAM_CONSTRUCT_ONLY |
                                                             G_PARAM_READWRITE));
-
-        g_type_class_add_private(klass, sizeof(KtColorPriv));
 }
 
 static void kt_color_init(KtColor *color)
 {
-        KtColorPriv *priv;
+        KtColorPrivate *priv;
 
-        color->priv = G_TYPE_INSTANCE_GET_PRIVATE(color,
-                                                  KT_COLOR_TYPE,
-                                                  KtColorPriv);
+        color->priv = kt_color_get_instance_private(color);
 
         priv = color->priv;
 
@@ -200,7 +197,7 @@ static void kt_color_init(KtColor *color)
 KtColor *kt_color_new(KtApp *app, KtPrefs *prefs)
 {
         KtColor *color = NULL;
-        KtColorPriv *priv;
+        KtColorPrivate *priv;
 
         color = g_object_new(KT_COLOR_TYPE,
                              "kt-app", app,

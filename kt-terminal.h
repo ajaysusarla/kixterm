@@ -33,7 +33,7 @@ G_BEGIN_DECLS
 
 typedef struct _KtTerminal KtTerminal;
 typedef struct _KtTerminalClass KtTerminalClass;
-typedef struct _KtTerminalPriv KtTerminalPriv;
+typedef struct _KtTerminalPrivate KtTerminalPrivate;
 
 #define KT_TERMINAL_TYPE (kt_terminal_get_type())
 #define KT_TERMINAL(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), KT_TERMINAL_TYPE, KtTerminal))
@@ -46,7 +46,7 @@ struct _KtTerminal {
         GObject parent_instance;
 
         /* <private> */
-        KtTerminalPriv *priv;
+        KtTerminalPrivate *priv;
 };
 
 struct _KtTerminalClass {

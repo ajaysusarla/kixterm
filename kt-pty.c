@@ -34,7 +34,7 @@
 #define SPAWN_FLAGS G_SPAWN_CHILD_INHERITS_STDIN | \
         G_SPAWN_DO_NOT_REAP_CHILD
 
-struct _KtPtyPriv {
+struct _KtPtyPrivate {
         GString *wid;
         GPid cpid;
         /* openpty fd */
@@ -50,7 +50,8 @@ enum {
         PROP_KT_PREFS,
 };
 
-G_DEFINE_TYPE(KtPty, kt_pty, G_TYPE_OBJECT);
+G_DEFINE_TYPE_WITH_CODE(KtPty, kt_pty, G_TYPE_OBJECT,
+                        G_ADD_PRIVATE(KtPty));
 
 /* Private methods */
 /**
@@ -60,7 +61,7 @@ G_DEFINE_TYPE(KtPty, kt_pty, G_TYPE_OBJECT);
  */
 static gboolean pty_create(KtPty *pty)
 {
-        KtPtyPriv *priv = pty->priv;
+        KtPtyPrivate *priv = pty->priv;
         gint master, slave;
 
         if (openpty(&master, &slave, NULL, NULL, NULL) < 0) {
@@ -76,7 +77,7 @@ static gboolean pty_create(KtPty *pty)
 
 static void pty_spawn_cb(KtPty *pty)
 {
-        KtPtyPriv *priv = pty->priv;
+        KtPtyPrivate *priv = pty->priv;
 
         if (setsid() == -1) {
                 error("setsid() failed.");
@@ -119,7 +120,7 @@ static void kt_pty_get_property(GObject *obj,
                                 GParamSpec *pspec)
 {
         KtPty *pty = KT_PTY(obj);
-        KtPtyPriv *priv = pty->priv;
+        KtPtyPrivate *priv = pty->priv;
 
         switch(param_id) {
         case PROP_KT_PREFS:
@@ -136,7 +137,7 @@ static void kt_pty_set_property(GObject *obj,
                                 GParamSpec *pspec)
 {
         KtPty *pty = KT_PTY(obj);
-        KtPtyPriv *priv = pty->priv;
+        KtPtyPrivate *priv = pty->priv;
 
         switch(param_id) {
         case PROP_KT_PREFS:
@@ -154,7 +155,7 @@ static void kt_pty_set_property(GObject *obj,
 static void kt_pty_finalize(GObject *object)
 {
         KtPty *pty = KT_PTY(object);
-        KtPtyPriv *priv = pty->priv;
+        KtPtyPrivate *priv = pty->priv;
 
         if (priv->mfd) {
                 close(priv->mfd);
@@ -191,18 +192,13 @@ static void kt_pty_class_init(KtPtyClass *klass)
                                                             KT_PREFS_TYPE,
                                                             G_PARAM_CONSTRUCT_ONLY |
                                                             G_PARAM_READWRITE));
-
-        g_type_class_add_private(klass, sizeof(KtPtyPriv));
 }
 
 static void kt_pty_init(KtPty *pty)
 {
-        KtPtyPriv *priv;
+        KtPtyPrivate *priv;
 
-        pty->priv = G_TYPE_INSTANCE_GET_PRIVATE(pty,
-                                                KT_PTY_TYPE,
-                                                KtPtyPriv);
-
+        pty->priv = kt_pty_get_instance_private(pty);
         priv = pty->priv;
 
         priv->mfd = -1;
@@ -216,7 +212,7 @@ static void kt_pty_init(KtPty *pty)
 KtPty *kt_pty_new(KtPrefs *prefs, xcb_window_t wid)
 {
         KtPty *pty = NULL;
-        KtPtyPriv *priv;
+        KtPtyPrivate *priv;
         /* Window ID is typically 8 digits. */
         gchar buf[sizeof(long) * 8 + 1];
 
@@ -254,7 +250,7 @@ failed:
  */
 gint kt_pty_get_fd(KtPty *pty)
 {
-        KtPtyPriv *priv;
+        KtPtyPrivate *priv;
 
         g_return_val_if_fail(KT_IS_PTY(pty), -1);
 
@@ -270,7 +266,7 @@ gint kt_pty_get_fd(KtPty *pty)
  */
 gboolean kt_pty_spawn(KtPty *pty, gchar **args)
 {
-        KtPtyPriv *priv = pty->priv;
+        KtPtyPrivate *priv = pty->priv;
         gboolean retval = FALSE;
         GError *error = NULL;
         GPid pid;
@@ -313,7 +309,7 @@ gboolean kt_pty_spawn(KtPty *pty, gchar **args)
  */
 gboolean kt_pty_set_size(KtPty *pty, gint rows, gint cols)
 {
-        KtPtyPriv *priv = pty->priv;
+        KtPtyPrivate *priv = pty->priv;
         struct winsize wsize;
 
         g_return_val_if_fail(KT_IS_PTY(pty), FALSE);

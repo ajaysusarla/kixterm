@@ -30,7 +30,7 @@ G_BEGIN_DECLS
 
 typedef struct _KtPrefs KtPrefs;
 typedef struct _KtPrefsClass KtPrefsClass;
-typedef struct _KtPrefsPriv KtPrefsPriv;
+typedef struct _KtPrefsPrivate KtPrefsPrivate;
 
 #define KT_PREFS_TYPE (kt_prefs_get_type())
 #define KT_PREFS(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), KT_PREFS_TYPE, KtPrefs))
@@ -63,7 +63,7 @@ struct _KtPrefs {
         kt_color_t bg_color;
         kt_color_t vb_color; /* Visual Bell color */
 
-        KtPrefsPriv *priv;
+        KtPrefsPrivate *priv;
 };
 
 struct _KtPrefsClass {

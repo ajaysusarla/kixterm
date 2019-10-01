@@ -28,7 +28,7 @@
 #include <cairo/cairo-xcb.h>
 #include <pango/pangocairo.h>
 
-struct _KtFontPriv {
+struct _KtFontPrivate {
         PangoFontDescription *normal;
         PangoFontDescription *bold;
         PangoFontDescription *italic;
@@ -48,7 +48,8 @@ enum {
         PROP_KT_PREFS,
 };
 
-G_DEFINE_TYPE(KtFont, kt_font, G_TYPE_OBJECT);
+G_DEFINE_TYPE_WITH_CODE(KtFont, kt_font, G_TYPE_OBJECT,
+                        G_ADD_PRIVATE(KtFont));
 
 /* Private methods */
 static PangoFontDescription *font_desc_new(const char *name,
@@ -83,7 +84,7 @@ static void get_font_size(KtFont *font)
         cairo_t *cairo;
         PangoLayout *layout;
         PangoRectangle i_rect, l_rect;
-        KtFontPriv *priv;
+        KtFontPrivate *priv;
         xcb_connection_t *con;
         xcb_screen_t *screen;
         xcb_visualtype_t *visual;
@@ -125,7 +126,7 @@ static void kt_font_get_property(GObject *obj,
                                  GParamSpec *pspec)
 {
         KtFont *font = KT_FONT(obj);
-        KtFontPriv *priv = font->priv;
+        KtFontPrivate *priv = font->priv;
 
         switch(param_id) {
         case PROP_KT_APP:
@@ -146,7 +147,7 @@ static void kt_font_set_property(GObject *obj,
                                  GParamSpec *pspec)
 {
         KtFont *font = KT_FONT(obj);
-        KtFontPriv *priv = font->priv;
+        KtFontPrivate *priv = font->priv;
 
         switch(param_id) {
         case PROP_KT_APP:
@@ -170,7 +171,7 @@ static void kt_font_set_property(GObject *obj,
 static void kt_font_finalize(GObject *object)
 {
         KtFont *font = KT_FONT(object);
-        KtFontPriv *priv = font->priv;
+        KtFontPrivate *priv = font->priv;
 
         if (priv->normal)
                 font_desc_free(priv->normal);
@@ -214,18 +215,13 @@ static void kt_font_class_init(KtFontClass *klass)
                                                             KT_PREFS_TYPE,
                                                             G_PARAM_CONSTRUCT_ONLY |
                                                             G_PARAM_READWRITE));
-
-        g_type_class_add_private(klass, sizeof(KtFontPriv));
 }
 
 static void kt_font_init(KtFont *font)
 {
-        KtFontPriv *priv;
+        KtFontPrivate *priv;
 
-        font->priv = G_TYPE_INSTANCE_GET_PRIVATE(font,
-                                                 KT_FONT_TYPE,
-                                                 KtFontPriv);
-
+        font->priv = kt_font_get_instance_private(font);
         priv = font->priv;
 
         priv->normal = NULL;
@@ -241,7 +237,7 @@ static void kt_font_init(KtFont *font)
 KtFont *kt_font_new(KtApp *app, KtPrefs *prefs)
 {
         KtFont *font = NULL;
-        KtFontPriv *priv;
+        KtFontPrivate *priv;
 
         font = g_object_new(KT_FONT_TYPE,
                             "kt-app", app,
@@ -272,7 +268,7 @@ KtFont *kt_font_new(KtApp *app, KtPrefs *prefs)
 
 void kt_font_get_size(KtFont *font, int *width, int *height)
 {
-        KtFontPriv *priv;
+        KtFontPrivate *priv;
 
         g_return_if_fail(KT_IS_FONT(font));
 

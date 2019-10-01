@@ -57,7 +57,7 @@ enum {
         CUR_MAX
 };
 
-struct _KtAppPriv {
+struct _KtAppPrivate {
         const gchar *display;
 
         xcb_connection_t *connection; /* X connection */
@@ -76,7 +76,8 @@ struct _KtAppPriv {
         gint xfd; /* X file descriptor */
 };
 
-G_DEFINE_TYPE(KtApp, kt_app, G_TYPE_OBJECT);
+G_DEFINE_TYPE_WITH_CODE(KtApp, kt_app, G_TYPE_OBJECT,
+                        G_ADD_PRIVATE(KtApp));
 
 /* Private methods */
 static xcb_atom_t atom_init(xcb_connection_t *c,
@@ -206,7 +207,7 @@ static xcb_pixmap_t get_root_pixmap(xcb_connection_t *c,
                                     xcb_atom_t atom)
 {
         xcb_get_property_cookie_t cookie;
-        xcb_get_property_reply_t *reply;
+        xcb_get_property_reply_t *reply = NULL;
         xcb_pixmap_t *rootpixmap = NULL;
 
         cookie = xcb_get_property(c,
@@ -237,7 +238,7 @@ static xcb_pixmap_t get_root_pixmap(xcb_connection_t *c,
 static void kt_app_finalize(GObject *object)
 {
         KtApp *app;
-        KtAppPriv *priv;
+        KtAppPrivate *priv;
 
         app = KT_APP(object);
         priv = app->priv;
@@ -267,17 +268,13 @@ static void kt_app_class_init(KtAppClass *klass)
         GObjectClass *oclass = G_OBJECT_CLASS(klass);
 
         oclass->finalize = kt_app_finalize;
-
-        g_type_class_add_private(klass, sizeof(KtAppPriv));
 }
 
 static void kt_app_init(KtApp *app)
 {
-        KtAppPriv *priv;
+        KtAppPrivate *priv;
 
-        app->priv = G_TYPE_INSTANCE_GET_PRIVATE(app,
-                                                KT_APP_TYPE,
-                                                KtAppPriv);
+        app->priv = kt_app_get_instance_private(app);
 
         priv = app->priv;
 
@@ -293,7 +290,7 @@ static void kt_app_init(KtApp *app)
 KtApp *kt_app_new(void)
 {
         KtApp *app = NULL;
-        KtAppPriv *priv;
+        KtAppPrivate *priv;
         xcb_screen_iterator_t s_iter;
         xcb_depth_iterator_t d_iter;
         int i;
@@ -408,7 +405,7 @@ failed:
 
 xcb_connection_t *kt_app_get_x_connection(KtApp *app)
 {
-        KtAppPriv *priv;
+        KtAppPrivate *priv;
 
         g_return_val_if_fail(KT_IS_APP(app), NULL);
 
@@ -419,7 +416,7 @@ xcb_connection_t *kt_app_get_x_connection(KtApp *app)
 
 xcb_ewmh_connection_t *kt_app_get_ewmh_connection(KtApp *app)
 {
-        KtAppPriv *priv;
+        KtAppPrivate *priv;
 
         g_return_val_if_fail(KT_IS_APP(app), NULL);
 
@@ -430,7 +427,7 @@ xcb_ewmh_connection_t *kt_app_get_ewmh_connection(KtApp *app)
 
 xcb_screen_t *kt_app_get_screen(KtApp *app)
 {
-        KtAppPriv *priv;
+        KtAppPrivate *priv;
 
         g_return_val_if_fail(KT_IS_APP(app), NULL);
 
@@ -441,7 +438,7 @@ xcb_screen_t *kt_app_get_screen(KtApp *app)
 
 gint kt_app_get_default_screen(KtApp *app)
 {
-        KtAppPriv *priv;
+        KtAppPrivate *priv;
 
         g_return_val_if_fail(KT_IS_APP(app), -1);
 
@@ -452,7 +449,7 @@ gint kt_app_get_default_screen(KtApp *app)
 
 xcb_visualtype_t *kt_app_get_visual(KtApp *app)
 {
-        KtAppPriv *priv;
+        KtAppPrivate *priv;
 
         g_return_val_if_fail(KT_IS_APP(app), NULL);
 
@@ -464,7 +461,7 @@ xcb_visualtype_t *kt_app_get_visual(KtApp *app)
 
 gint kt_app_get_xfd(KtApp *app)
 {
-        KtAppPriv *priv;
+        KtAppPrivate *priv;
 
         g_return_val_if_fail(KT_IS_APP(app), -1);
 
@@ -479,7 +476,7 @@ gint kt_app_get_xfd(KtApp *app)
 
 const gchar *kt_app_get_display_name(KtApp *app)
 {
-        KtAppPriv *priv;
+        KtAppPrivate *priv;
 
         g_return_val_if_fail(KT_IS_APP(app), NULL);
 
@@ -490,7 +487,7 @@ const gchar *kt_app_get_display_name(KtApp *app)
 
 xcb_cursor_t kt_app_get_normal_cursor(KtApp *app)
 {
-        KtAppPriv *priv;
+        KtAppPrivate *priv;
 
         g_return_val_if_fail(KT_IS_APP(app), -1);
 
@@ -501,7 +498,7 @@ xcb_cursor_t kt_app_get_normal_cursor(KtApp *app)
 
 xcb_cursor_t kt_app_get_hidden_cursor(KtApp *app)
 {
-        KtAppPriv *priv;
+        KtAppPrivate *priv;
 
         g_return_val_if_fail(KT_IS_APP(app), -1);
 

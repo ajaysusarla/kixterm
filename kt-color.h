@@ -32,7 +32,7 @@ G_BEGIN_DECLS
 
 typedef struct _KtColor KtColor;
 typedef struct _KtColorClass KtColorClass;
-typedef struct _KtColorPriv KtColorPriv;
+typedef struct _KtColorPrivate KtColorPrivate;
 
 #define KT_COLOR_TYPE (kt_color_get_type())
 #define KT_COLOR(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), KT_COLOR_TYPE, KtColor))
@@ -45,7 +45,7 @@ struct _KtColor {
         GObject parent_instance;
 
         /* <private> */
-        KtColorPriv *priv;
+        KtColorPrivate *priv;
 };
 
 struct _KtColorClass {

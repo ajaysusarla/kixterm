@@ -28,7 +28,7 @@
 #include <xcb/xcb_icccm.h>
 #include <pango/pangocairo.h>
 
-struct _KtWindowPriv {
+struct _KtWindowPrivate {
         xcb_window_t window;
         xcb_gcontext_t gc;
         xcb_rectangle_t geometry;
@@ -56,12 +56,13 @@ enum {
         PROP_KT_COLOR,
 };
 
-G_DEFINE_TYPE(KtWindow, kt_window, G_TYPE_OBJECT);
+G_DEFINE_TYPE_WITH_CODE(KtWindow, kt_window, G_TYPE_OBJECT,
+                        G_ADD_PRIVATE(KtWindow));
 
 /* Private methods */
 static void render_pixmap(KtWindow *window)
 {
-        KtWindowPriv *priv = window->priv;
+        KtWindowPrivate *priv = window->priv;
 
         priv->cairo = cairo_create(priv->surface);
         cairo_set_line_width(priv->cairo, 1.0);
@@ -85,7 +86,7 @@ static void render_pixmap(KtWindow *window)
 
 static void create_pixmap_and_cairo_surface(KtWindow *window)
 {
-        KtWindowPriv *priv = window->priv;
+        KtWindowPrivate *priv = window->priv;
         xcb_void_cookie_t cookie;
         xcb_generic_error_t *error = NULL;
         xcb_connection_t *con;
@@ -129,7 +130,7 @@ static void create_pixmap_and_cairo_surface(KtWindow *window)
 static void
 kt_window_draw_fg(KtTerminal *term, KtBuffer *buffer, KtWindow *window)
 {
-        KtWindowPriv *priv = window->priv;
+        KtWindowPrivate *priv = window->priv;
 
         cairo_save(priv->cairo);
         {
@@ -157,7 +158,7 @@ static void kt_window_get_property(GObject *obj,
                                    GParamSpec *pspec)
 {
         KtWindow *window = KT_WINDOW(obj);
-        KtWindowPriv *priv = window->priv;
+        KtWindowPrivate *priv = window->priv;
 
         switch(param_id) {
         case PROP_KT_APP:
@@ -184,7 +185,7 @@ static void kt_window_set_property(GObject *obj,
                                   GParamSpec *pspec)
 {
         KtWindow *window = KT_WINDOW(obj);
-        KtWindowPriv *priv = window->priv;
+        KtWindowPrivate *priv = window->priv;
 
         switch(param_id) {
         case PROP_KT_APP:
@@ -220,7 +221,7 @@ static void kt_window_set_property(GObject *obj,
 static void kt_window_finalize(GObject *object)
 {
         KtWindow *window = KT_WINDOW(object);
-        KtWindowPriv *priv = window->priv;
+        KtWindowPrivate *priv = window->priv;
         xcb_connection_t *con;
 
         con = kt_app_get_x_connection(priv->app);
@@ -287,17 +288,13 @@ static void kt_window_class_init(KtWindowClass *klass)
                                                             KT_COLOR_TYPE,
                                                             G_PARAM_CONSTRUCT_ONLY |
                                                             G_PARAM_READWRITE));
-
-        g_type_class_add_private(klass, sizeof(KtWindowPriv));
 }
 
 static void kt_window_init(KtWindow *window)
 {
-        KtWindowPriv *priv;
+        KtWindowPrivate *priv;
 
-        window->priv = G_TYPE_INSTANCE_GET_PRIVATE(window,
-                                                   KT_WINDOW_TYPE,
-                                                   KtWindowPriv);
+        window->priv = kt_window_get_instance_private(window);
 
         priv = window->priv;
 
@@ -318,7 +315,7 @@ KtWindow *kt_window_new(KtApp *app,
                         KtColor *color)
 {
         KtWindow *win = NULL;
-        KtWindowPriv *priv = NULL;
+        KtWindowPrivate *priv = NULL;
         xcb_connection_t *con;
         xcb_screen_t *screen;
         xcb_generic_error_t *error = NULL;
@@ -487,7 +484,7 @@ void kt_window_focus_out(KtWindow *window, xcb_focus_out_event_t *event)
 
 void kt_window_map_notify(KtWindow *window, xcb_map_notify_event_t *event)
 {
-        KtWindowPriv *priv;
+        KtWindowPrivate *priv;
 
         g_return_if_fail(KT_IS_WINDOW(window));
 

@@ -35,7 +35,7 @@
 
 typedef struct _KtWindow KtWindow;
 typedef struct _KtWindowClass KtWindowClass;
-typedef struct _KtWindowPriv KtWindowPriv;
+typedef struct _KtWindowPrivate KtWindowPrivate;
 
 #define KT_WINDOW_TYPE (kt_window_get_type())
 #define KT_WINDOW(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), KT_WINDOW_TYPE, KtWindow))
@@ -47,7 +47,7 @@ typedef struct _KtWindowPriv KtWindowPriv;
 struct _KtWindow {
         GObject parent_instance;
 
-        KtWindowPriv *priv;
+        KtWindowPrivate *priv;
 };
 
 struct _KtWindowClass {

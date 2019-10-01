@@ -23,11 +23,12 @@
 #include "kt-prefs.h"
 #include "kt-color-scheme.h"
 
-struct _KtPrefsPriv {
+struct _KtPrefsPrivate {
         gboolean ignore;
 };
 
-G_DEFINE_TYPE(KtPrefs, kt_prefs, G_TYPE_OBJECT);
+G_DEFINE_TYPE_WITH_CODE(KtPrefs, kt_prefs, G_TYPE_OBJECT,
+                        G_ADD_PRIVATE(KtPrefs));
 
 /* Private methods */
 
@@ -43,16 +44,11 @@ static void kt_prefs_class_init(KtPrefsClass *klass)
         GObjectClass *oclass = G_OBJECT_CLASS(klass);
 
         oclass->finalize = kt_prefs_finalize;
-
-        g_type_class_add_private(klass, sizeof(KtPrefsPriv));
 }
 
 static void kt_prefs_init(KtPrefs *prefs)
 {
-        prefs->priv = G_TYPE_INSTANCE_GET_PRIVATE(prefs,
-                                                  KT_PREFS_TYPE,
-                                                  KtPrefsPriv);
-
+        prefs->priv = kt_prefs_get_instance_private(prefs);
         prefs->title = "kixterm";
         prefs->xpos = -1;
         prefs->ypos = -1;

@@ -32,7 +32,7 @@ G_BEGIN_DECLS
 
 typedef struct _KtApp KtApp;
 typedef struct _KtAppClass KtAppClass;
-typedef struct _KtAppPriv KtAppPriv;
+typedef struct _KtAppPrivate KtAppPrivate;
 
 #define KT_APP_TYPE (kt_app_get_type())
 #define KT_APP(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), KT_APP_TYPE, KtApp))
@@ -45,7 +45,7 @@ struct _KtApp {
         GObject parent_instance;
 
         /* Private */
-        KtAppPriv *priv;
+        KtAppPrivate *priv;
 };
 
 struct _KtAppClass {

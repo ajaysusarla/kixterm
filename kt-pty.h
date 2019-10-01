@@ -30,7 +30,7 @@
 
 typedef struct _KtPty KtPty;
 typedef struct _KtPtyClass KtPtyClass;
-typedef struct _KtPtyPriv KtPtyPriv;
+typedef struct _KtPtyPrivate KtPtyPrivate;
 
 #define KT_PTY_TYPE (kt_pty_get_type())
 #define KT_PTY(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), KT_PTY_TYPE, KtPty))
@@ -43,7 +43,7 @@ struct _KtPty {
         GObject parent_instance;
 
         /* <private> */
-        KtPtyPriv *priv;
+        KtPtyPrivate *priv;
 };
 
 struct _KtPtyClass {

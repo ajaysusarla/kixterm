@@ -41,7 +41,7 @@ enum {
         SIGNAL_LAST
 };
 
-struct _KtTerminalPriv {
+struct _KtTerminalPrivate {
         KtPty *pty;
 
         GIOChannel *channel;
@@ -54,7 +54,8 @@ struct _KtTerminalPriv {
         KtPrefs *prefs;
 };
 
-G_DEFINE_TYPE(KtTerminal, kt_terminal, G_TYPE_OBJECT);
+G_DEFINE_TYPE_WITH_CODE(KtTerminal, kt_terminal, G_TYPE_OBJECT,
+                        G_ADD_PRIVATE(KtTerminal));
 
 static guint signals[SIGNAL_LAST] = {0, };
 static GParamSpec *param_specs[PROP_LAST] = {NULL, };
@@ -62,7 +63,7 @@ static GParamSpec *param_specs[PROP_LAST] = {NULL, };
 /* Private methods */
 static void terminal_set_size(KtTerminal *term)
 {
-        KtTerminalPriv *priv = term->priv;
+        KtTerminalPrivate *priv = term->priv;
         gint rows, cols;
 
         rows = priv->prefs->rows;
@@ -138,7 +139,7 @@ static gboolean io_read_cb(GIOChannel *channel,
 
 static void terminal_setup_pty(KtTerminal *term)
 {
-        KtTerminalPriv *priv = term->priv;
+        KtTerminalPrivate *priv = term->priv;
         gint mfd;
         long flags;
 
@@ -172,7 +173,7 @@ static void child_watch_cb(GPid pid,
                            int status,
                            KtTerminal *term)
 {
-        KtTerminalPriv *priv = term->priv;
+        KtTerminalPrivate *priv = term->priv;
 
         g_object_ref(G_OBJECT(term));
 
@@ -193,7 +194,7 @@ static void child_watch_cb(GPid pid,
 
 static void terminal_watch_child(KtTerminal *term)
 {
-        KtTerminalPriv *priv = term->priv;
+        KtTerminalPrivate *priv = term->priv;
 
         g_object_freeze_notify(G_OBJECT(term));
 
@@ -217,7 +218,7 @@ static void kt_terminal_get_property(GObject *obj,
                                      GParamSpec *pspec)
 {
         KtTerminal *term = KT_TERMINAL(obj);
-        KtTerminalPriv *priv = term->priv;
+        KtTerminalPrivate *priv = term->priv;
 
         switch(param_id) {
         case PROP_KT_PREFS:
@@ -234,7 +235,7 @@ static void kt_terminal_set_property(GObject *obj,
                                      GParamSpec *pspec)
 {
         KtTerminal *term = KT_TERMINAL(obj);
-        KtTerminalPriv *priv = term->priv;
+        KtTerminalPrivate *priv = term->priv;
 
         switch(param_id) {
         case PROP_KT_PREFS:
@@ -252,7 +253,7 @@ static void kt_terminal_set_property(GObject *obj,
 static void kt_terminal_finalize(GObject *object)
 {
         KtTerminal *term = KT_TERMINAL(object);
-        KtTerminalPriv *priv = term->priv;
+        KtTerminalPrivate *priv = term->priv;
 
         if (priv->child_watch_source != 0) {
                 g_source_remove(priv->child_watch_source);
@@ -320,17 +321,13 @@ static void kt_terminal_class_init(KtTerminalClass *klass)
                              G_TYPE_NONE,
                              1,
                              KT_TYPE_BUFFER | G_SIGNAL_TYPE_STATIC_SCOPE);
-
-        g_type_class_add_private(klass, sizeof(KtTerminalPriv));
 }
 
 static void kt_terminal_init(KtTerminal *term)
 {
-        KtTerminalPriv *priv;
+        KtTerminalPrivate *priv;
 
-        term->priv = G_TYPE_INSTANCE_GET_PRIVATE(term,
-                                                 KT_TERMINAL_TYPE,
-                                                 KtTerminalPriv);
+        term->priv = kt_terminal_get_instance_private(term);
         priv = term->priv;
 
         priv->pty = NULL;
@@ -342,7 +339,7 @@ static void kt_terminal_init(KtTerminal *term)
 KtTerminal *kt_terminal_new(KtPrefs *prefs, xcb_window_t wid)
 {
         KtTerminal *terminal = NULL;
-        KtTerminalPriv *priv = NULL;
+        KtTerminalPrivate *priv = NULL;
 
         g_return_val_if_fail(KT_IS_PREFS(prefs), NULL);
 
